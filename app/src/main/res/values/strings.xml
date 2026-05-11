@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GlipVerUp</string>
+    <string name="rec_button">REC</string>
+    <string name="stop_button">STOP</string>
+    <string name="recording">Recording...</string>
+</resources>
