@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            android.util.Log.d("ZZZGlip", "MainActivity: Received STOP_RECORDING broadcast")
             mainViewModel?.updateRecordingState(false)
         }
     }
@@ -97,7 +98,11 @@ class MainActivity : ComponentActivity() {
 
     private fun startRecordingProcess() {
         if (checkOverlayPermission(request = true)) {
-            screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
+            } else {
+                screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+            }
         }
     }
 
