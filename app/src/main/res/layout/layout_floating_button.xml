@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/btn_save"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:background="@drawable/bg_floating_button"
+        android:gravity="center"
+        android:text="SAVE"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF" />
+
+</FrameLayout>
