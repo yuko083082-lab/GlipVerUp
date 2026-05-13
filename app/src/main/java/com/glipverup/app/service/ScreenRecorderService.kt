@@ -8,6 +8,7 @@ import android.hardware.display.VirtualDisplay
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -26,6 +27,15 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 import java.util.*
 
+// Media3 imports
+import androidx.media3.common.MediaItem
+import androidx.media3.transformer.Composition
+import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
+import androidx.media3.transformer.ExportException
+import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.Transformer
+
 class ScreenRecorderService : Service() {
 
     private lateinit var windowManager: WindowManager
@@ -42,11 +52,12 @@ class ScreenRecorderService : Service() {
     private val CHANNEL_ID = "ZZZGlipChannel"
     private val NOTIFICATION_ID = 1001
 
-    private val segmentDurationMs = 15000L
+    private var segmentDurationMs = 60000L // 1 minute segments
     private val segments = LinkedList<File>()
     private val handler = Handler(Looper.getMainLooper())
     private var isRecording = false
     private var currentBufferTime = "7 min"
+    private var rotationRunnable: Runnable? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -58,7 +69,6 @@ class ScreenRecorderService : Service() {
         projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         settingsManager = SettingsManager(this)
         
-        // Reactively sync buffer time from settings
         serviceScope.launch {
             settingsManager.bufferTimeFlow.collectLatest { time ->
                 currentBufferTime = time
@@ -115,24 +125,27 @@ class ScreenRecorderService : Service() {
                 
                 mediaProjection?.registerCallback(object : MediaProjection.Callback() {
                     override fun onStop() {
-                        stopRecording()
-                        stopSelf()
-                        sendBroadcast(Intent("com.glipverup.app.RECORDING_STOPPED"))
+                        Log.d("ZZZGlip", "MediaProjection onStop called")
+                        // On some devices, releasing virtual display triggers this.
+                        // We only stop if we are actually supposed to be stopping.
+                        if (isRecording) {
+                            Log.w("ZZZGlip", "MediaProjection stopped unexpectedly!")
+                            // You might want to try to restart it or just stop.
+                            stopRecording()
+                            stopSelf()
+                            sendBroadcast(Intent("com.glipverup.app.RECORDING_STOPPED"))
+                        }
                     }
                 }, handler)
 
                 showFloatingButton()
-                startSegmentedRecording()
+                isRecording = true
+                recordNextSegment()
             } catch (e: Exception) {
                 Log.e("ZZZGlip", "Service: Failed to start recording", e)
                 stopSelf()
             }
         }
-    }
-
-    private fun startSegmentedRecording() {
-        isRecording = true
-        recordNextSegment()
     }
 
     private fun recordNextSegment() {
@@ -148,18 +161,26 @@ class ScreenRecorderService : Service() {
                 
                 delay(200)
                 mediaRecorder?.start()
+                Log.d("ZZZGlip", "MediaRecorder started")
 
-                handler.postDelayed({
-                    if (isRecording) {
-                        stopCurrentSegment()
-                        recordNextSegment()
-                    }
-                }, segmentDurationMs)
+                scheduleNextRotation()
             } catch (e: Exception) {
                 Log.e("ZZZGlip", "Service: Error in recordNextSegment", e)
-                isRecording = false
+                // Don't set isRecording = false immediately, try again if possible
             }
         }
+    }
+
+    private fun scheduleNextRotation() {
+        rotationRunnable?.let { handler.removeCallbacks(it) }
+        rotationRunnable = Runnable {
+            if (isRecording) {
+                Log.d("ZZZGlip", "Rotating segment...")
+                stopCurrentSegment()
+                recordNextSegment()
+            }
+        }
+        handler.postDelayed(rotationRunnable!!, segmentDurationMs)
     }
 
     private fun setupMediaRecorder(resStr: String, fps: Int, bitrateMbps: Int) {
@@ -185,7 +206,8 @@ class ScreenRecorderService : Service() {
         val file = File(cacheDir, "seg_${System.currentTimeMillis()}.mp4")
         segments.add(file)
 
-        while (segments.size * segmentDurationMs > 7 * 60 * 1000 + segmentDurationMs) {
+        // Keep buffer for max possible time (7 min)
+        while (segments.size * segmentDurationMs > 8 * 60 * 1000) {
             val oldest = segments.removeFirst()
             if (oldest.exists()) oldest.delete()
         }
@@ -208,12 +230,19 @@ class ScreenRecorderService : Service() {
             prepare()
         }
 
-        virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "ZZZGlipCapture",
-            res.first, res.second, metrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            mediaRecorder?.surface, null, null
-        )
+        val surface = mediaRecorder?.surface
+        if (virtualDisplay == null) {
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "ZZZGlipCapture",
+                res.first, res.second, metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                surface, null, null
+            )
+            Log.d("ZZZGlip", "Created VirtualDisplay")
+        } else {
+            virtualDisplay?.surface = surface
+            Log.d("ZZZGlip", "Reused VirtualDisplay with new surface")
+        }
     }
 
     private fun stopCurrentSegment() {
@@ -221,36 +250,51 @@ class ScreenRecorderService : Service() {
             mediaRecorder?.stop()
             mediaRecorder?.release()
             mediaRecorder = null
-            virtualDisplay?.release()
-            virtualDisplay = null
+            // DO NOT release virtualDisplay here to avoid projection stopping
+            Log.d("ZZZGlip", "Stopped current segment")
         } catch (e: Exception) { 
-            Log.e("ZZZGlip", "stopCurrentSegment failed")
+            Log.e("ZZZGlip", "stopCurrentSegment failed", e)
         }
     }
 
     private fun saveLastMinutes() {
-        val durationMs = when(currentBufferTime) {
-            "7 min" -> 7 * 60 * 1000L
-            "5 min" -> 5 * 60 * 1000L
-            "3 min" -> 3 * 60 * 1000L
-            "1 min" -> 1 * 60 * 1000L
-            "30 sec" -> 30 * 1000L
-            "15 sec" -> 15 * 1000L
-            else -> 15 * 1000L
-        }
+        Log.d("ZZZGlip", "saveLastMinutes triggered")
+        rotationRunnable?.let { handler.removeCallbacks(it) }
+        
+        serviceScope.launch {
+            // 1. Stop current segment to make it playable
+            stopCurrentSegment()
+            
+            val durationMs = when(currentBufferTime) {
+                "7 min" -> 7 * 60 * 1000L
+                "5 min" -> 5 * 60 * 1000L
+                "3 min" -> 3 * 60 * 1000L
+                "1 min" -> 60 * 1000L
+                "30 sec" -> 30 * 1000L
+                "15 sec" -> 15 * 1000L
+                else -> 15 * 1000L
+            }
 
-        // Include the current segment if it has some size, or just use all available
-        val availableSegments = segments.filter { it.exists() && it.length() > 0 }
+            // 2. Identify segments
+            val availableSegments = segments.filter { it.exists() && it.length() > 0 }
+            if (availableSegments.isEmpty()) {
+                Toast.makeText(this@ScreenRecorderService, "No recording available yet", Toast.LENGTH_SHORT).show()
+                recordNextSegment()
+                return@launch
+            }
 
-        if (availableSegments.isEmpty()) {
-            Toast.makeText(this, "Wait a few seconds for buffer...", Toast.LENGTH_SHORT).show()
-            return
-        }
+            // Calculate how many segments we need
+            var accumulatedMs = 0L
+            val filesToMerge = mutableListOf<File>()
+            for (f in availableSegments.reversed()) {
+                filesToMerge.add(0, f)
+                accumulatedMs += segmentDurationMs // Approximate
+                if (accumulatedMs >= durationMs) break
+            }
 
-        val numSegments = (durationMs / segmentDurationMs).toInt().coerceAtLeast(1)
-        val filesToSave = availableSegments.takeLast(numSegments)
+            Log.d("ZZZGlip", "Merging ${filesToMerge.size} files for $currentBufferTime")
 
-        serviceScope.launch(Dispatchers.IO) {
+            // 3. Perform Merge using Media3 Transformer
             try {
                 val moviesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES)
                 val appDir = File(moviesDir, "ZZZGlip")
@@ -258,25 +302,56 @@ class ScreenRecorderService : Service() {
 
                 val outFile = File(appDir, "clip_${System.currentTimeMillis()}.mp4")
                 
-                // Copy the most complete one among those selected
-                // To be playable, it should ideally be one that was already stop()ed.
-                // But if only one exists, we take it.
-                val fileToCopy = if (filesToSave.size > 1) filesToSave[filesToSave.size - 2] else filesToSave.last()
-                fileToCopy.copyTo(outFile, overwrite = true)
-
-                handler.post {
+                if (filesToMerge.size == 1) {
+                    filesToMerge[0].copyTo(outFile, overwrite = true)
                     Toast.makeText(this@ScreenRecorderService, "Saved! Buffer: $currentBufferTime", Toast.LENGTH_LONG).show()
+                } else {
+                    mergeFiles(filesToMerge, outFile)
                 }
             } catch (e: Exception) {
-                Log.e("ZZZGlip", "Service: Save failed", e)
+                Log.e("ZZZGlip", "Save failed", e)
+                Toast.makeText(this@ScreenRecorderService, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
+
+            // 4. Resume recording
+            recordNextSegment()
         }
     }
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun mergeFiles(files: List<File>, outputFile: File) {
+        val transformer = Transformer.Builder(this).build()
+        val mediaItems = files.map { MediaItem.fromUri(Uri.fromFile(it)) }
+        val editedMediaItems = mediaItems.map { EditedMediaItem.Builder(it).build() }
+        val sequence = EditedMediaItemSequence(editedMediaItems)
+        val composition = Composition.Builder(listOf(sequence)).build()
+
+        transformer.addListener(object : Transformer.Listener {
+            override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                handler.post {
+                    Toast.makeText(this@ScreenRecorderService, "Saved merged clip!", Toast.LENGTH_LONG).show()
+                    Log.d("ZZZGlip", "Merge completed: ${outputFile.absolutePath}")
+                }
+            }
+
+            override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                handler.post {
+                    Toast.makeText(this@ScreenRecorderService, "Merge failed: ${exportException.message}", Toast.LENGTH_SHORT).show()
+                    Log.e("ZZZGlip", "Merge error", exportException)
+                }
+            }
+        })
+
+        transformer.start(composition, outputFile.absolutePath)
+    }
+
     private fun stopRecording() {
+        Log.d("ZZZGlip", "stopRecording called")
         isRecording = false
-        handler.removeCallbacksAndMessages(null)
+        rotationRunnable?.let { handler.removeCallbacks(it) }
         stopCurrentSegment()
+        virtualDisplay?.release()
+        virtualDisplay = null
         if (mediaProjection != null) {
             mediaProjection?.stop()
             mediaProjection = null
@@ -293,6 +368,9 @@ class ScreenRecorderService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        Log.d("ZZZGlip", "onTaskRemoved")
+        // User said: don't disappear until task kill.
+        // So keeping it here is correct.
         stopRecording()
         stopSelf()
     }
@@ -344,11 +422,6 @@ class ScreenRecorderService : Service() {
                 params.gravity = Gravity.TOP or Gravity.START
                 params.x = 200; params.y = 200
 
-                val btn = floatingView?.findViewById<TextView>(R.id.btn_save)
-                btn?.setOnClickListener { 
-                    saveLastMinutes() 
-                }
-
                 floatingView?.setOnTouchListener(object : View.OnTouchListener {
                     private var initialX = 0; private var initialY = 0
                     private var initialTouchX = 0f; private var initialTouchY = 0f
@@ -358,6 +431,7 @@ class ScreenRecorderService : Service() {
                     override fun onTouch(v: View, event: MotionEvent): Boolean {
                         when (event.action) {
                             MotionEvent.ACTION_DOWN -> {
+                                Log.d("ZZZGlip", "Floating: DOWN")
                                 initialX = params.x; initialY = params.y
                                 initialTouchX = event.rawX; initialTouchY = event.rawY
                                 isMoving = false
@@ -367,16 +441,17 @@ class ScreenRecorderService : Service() {
                                 val dx = (event.rawX - initialTouchX).toInt()
                                 val dy = (event.rawY - initialTouchY).toInt()
                                 if (Math.abs(dx) > touchSlop || Math.abs(dy) > touchSlop) {
+                                    isMoving = true
                                     params.x = initialX + dx
                                     params.y = initialY + dy
                                     windowManager.updateViewLayout(floatingView, params)
-                                    isMoving = true
                                 }
                                 return true
                             }
                             MotionEvent.ACTION_UP -> {
+                                Log.d("ZZZGlip", "Floating: UP, isMoving=$isMoving")
                                 if (!isMoving) {
-                                    v.performClick()
+                                    saveLastMinutes()
                                 }
                                 return true
                             }
