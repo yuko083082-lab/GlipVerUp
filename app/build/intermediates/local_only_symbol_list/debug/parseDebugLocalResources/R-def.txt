@@ -1,0 +1,9 @@
+R_DEF: Internal format may change without notice
+local
+drawable bg_floating_button
+id btn_save
+layout layout_floating_button
+string app_name
+string rec_button
+string recording
+string stop_button
