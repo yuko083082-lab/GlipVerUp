@@ -54,16 +54,31 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                     times.chunked(3).forEach { rowItems ->
                         Row {
                             rowItems.forEach { item ->
+                                val isRestricted = resolution == "4K" && item != "30 sec" && item != "15 sec"
                                 FilterChip(
                                     selected = bufferTime == item,
-                                    onClick = { viewModel.updateBufferTime(item) },
-                                    label = { Text(item) },
-                                    modifier = Modifier.padding(end = 8.dp)
+                                    onClick = { if (!isRestricted) viewModel.updateBufferTime(item) },
+                                    label = { 
+                                        Text(
+                                            text = item,
+                                            color = if (isRestricted) Color.DarkGray else Color.Unspecified
+                                        ) 
+                                    },
+                                    modifier = Modifier.padding(end = 8.dp),
+                                    enabled = !isRestricted
                                 )
                             }
                         }
                     }
                 }
+            }
+            if (resolution == "4K") {
+                Text(
+                    "Note: 4K recording is limited to 30s buffer due to performance.",
+                    color = Color(0xFFFFCC00),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
 
             Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 16.dp))

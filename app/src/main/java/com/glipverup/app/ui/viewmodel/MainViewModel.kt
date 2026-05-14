@@ -38,7 +38,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateBufferTime(value: String) {
-        viewModelScope.launch { settingsManager.updateBufferTime(value) }
+        viewModelScope.launch {
+            if (resolution.value == "4K") {
+                if (value == "30 sec" || value == "15 sec") {
+                    settingsManager.updateBufferTime(value)
+                }
+            } else {
+                settingsManager.updateBufferTime(value)
+            }
+        }
     }
 
     fun updateQuality(value: String) {
@@ -46,7 +54,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateResolution(value: String) {
-        viewModelScope.launch { settingsManager.updateResolution(value) }
+        viewModelScope.launch {
+            settingsManager.updateResolution(value)
+            if (value == "4K") {
+                val current = bufferTime.value
+                if (current != "30 sec" && current != "15 sec") {
+                    settingsManager.updateBufferTime("30 sec")
+                }
+            }
+        }
     }
 
     fun updateFps(value: Int) {
