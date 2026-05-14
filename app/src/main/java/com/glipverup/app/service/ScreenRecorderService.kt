@@ -4,6 +4,7 @@ import android.app.*
 import android.content.*
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
+import android.content.res.Configuration
 import android.hardware.display.VirtualDisplay
 import android.media.*
 import android.media.projection.MediaProjection
@@ -157,6 +158,29 @@ class ScreenRecorderService : Service() {
             windowManager.defaultDisplay.getRealMetrics(metrics) 
         }
         
+<<<<<<< HEAD
+        val res = when(resStr) {
+        val baseRes = when(resStr) {
+            "480p" -> Pair(854, 480)
+            "1080p" -> Pair(1920, 1080)
+            "1440p" -> Pair(2560, 1440)
+            "4K" -> Pair(3840, 2160)
+            else -> Pair(1280, 720)
+        }
+
+        // デバイスの現在の向きに合わせて解像度を調整
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val width = if (isLandscape) maxOf(baseRes.first, baseRes.second) else minOf(baseRes.first, baseRes.second)
+        val height = if (isLandscape) minOf(baseRes.first, baseRes.second) else maxOf(baseRes.first, baseRes.second)
+
+        val file = File(cacheDir, "seg_${System.currentTimeMillis()}.mp4")
+        segments.add(file)
+
+        // Keep buffer for max possible time (7 min)
+        while (segments.size * segmentDurationMs > 8 * 60 * 1000) {
+        // Keep buffer for max possible time (6 min + 1 min margin)
+        while (segments.size * segmentDurationMs > 7 * 60 * 1000) {
+=======
         val isPortrait = metrics.heightPixels > metrics.widthPixels
         val shortSide = when (res) { "480p" -> 480; "1080p" -> 1080; "1440p" -> 1440; "4K" -> 2160; else -> 720 }
         val scale = shortSide.toFloat() / if (isPortrait) metrics.widthPixels else metrics.heightPixels
@@ -217,6 +241,7 @@ class ScreenRecorderService : Service() {
         val file = File(cacheDir, "seg_${System.currentTimeMillis()}.mp4")
         segments.add(file)
         while (segments.size > 20) {
+>>>>>>> main
             val oldest = segments.removeFirst()
             if (oldest.exists()) oldest.delete()
         }
@@ -226,6 +251,49 @@ class ScreenRecorderService : Service() {
         audioTrackIndex = -1
         muxerStarted = false
 
+<<<<<<< HEAD
+        Log.d("ZZZGlip", "Setting up MediaRecorder: ${width}x${height}, Landscape=$isLandscape")
+
+        mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            MediaRecorder(this)
+        } else {
+            @Suppress("DEPRECATION")
+            MediaRecorder()
+        }
+
+        mediaRecorder?.apply {
+            setVideoSource(MediaRecorder.VideoSource.SURFACE)
+            // 内部音声/マイクの録音設定を追加
+            setAudioSource(MediaRecorder.AudioSource.MIC) 
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+            setVideoSize(res.first, res.second)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setVideoSize(width, height)
+            setVideoFrameRate(fps)
+            setVideoEncodingBitRate(bitrateMbps * 1024 * 1024)
+            setAudioEncodingBitRate(128 * 1024)
+            setAudioSamplingRate(44100)
+            setOutputFile(file.absolutePath)
+            prepare()
+        }
+
+        val surface = mediaRecorder?.surface
+
+        // 向きが変わっている、または未作成の場合はVirtualDisplayを更新
+        if (virtualDisplay == null || virtualDisplay?.display?.rotation != windowManager.defaultDisplay.rotation) {
+            virtualDisplay?.release()
+            virtualDisplay = mediaProjection?.createVirtualDisplay(
+                "ZZZGlipCapture",
+                width, height, metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                surface, null, null
+            )
+            Log.d("ZZZGlip", "Created VirtualDisplay")
+        } else {
+            virtualDisplay?.surface = surface
+            Log.d("ZZZGlip", "Reused VirtualDisplay with new surface")
+=======
         // RE-ADD tracks immediately if formats are already known from previous segments
         persistedVideoFormat?.let { videoTrackIndex = muxer?.addTrack(it) ?: -1 }
         persistedAudioFormat?.let { audioTrackIndex = muxer?.addTrack(it) ?: -1 }
@@ -242,6 +310,7 @@ class ScreenRecorderService : Service() {
             } catch (e: Exception) {
                 Log.e("ZZZGlip", "Failed to start muxer", e)
             }
+>>>>>>> main
         }
     }
 
@@ -320,6 +389,37 @@ class ScreenRecorderService : Service() {
 
     private fun saveLastMinutes() {
         serviceScope.launch {
+<<<<<<< HEAD
+            // 1. Stop current segment to make it playable
+            delay(500) // 最後の数秒が切れるのを防ぐためのバッファ
+            stopCurrentSegment()
+            
+            val durationMs = when(currentBufferTime) {
+                "7 min" -> 7 * 60 * 1000L
+            val resolution = settingsManager.resolutionFlow.first()
+            
+            // 解像度に基づいた制限ロジック
+            val rawDurationMs = when(currentBufferTime) {
+                "7 min", "6 min" -> 6 * 60 * 1000L
+                "5 min" -> 5 * 60 * 1000L
+                "3 min" -> 3 * 60 * 1000L
+                "1 min" -> 60 * 1000L
+                "30 sec" -> 30 * 1000L
+                "15 sec" -> 15 * 1000L
+                else -> 15 * 1000L
+            }
+
+            val durationMs = if (resolution == "1440p") minOf(rawDurationMs, 30 * 1000L)
+                             else if (resolution == "1080p") minOf(rawDurationMs, 3 * 60 * 1000L)
+                             else rawDurationMs
+
+            // 2. Identify segments
+            val availableSegments = segments.filter { it.exists() && it.length() > 0 }
+            if (availableSegments.isEmpty()) {
+                Toast.makeText(this@ScreenRecorderService, "No recording available yet", Toast.LENGTH_SHORT).show()
+                recordNextSegment()
+                return@launch
+=======
             rotateMuxerNextLoop = true
             delay(1200)
             val targetMs = when(currentBufferTime) {
@@ -335,6 +435,7 @@ class ScreenRecorderService : Service() {
                     fastMergeFiles(available, targetMs, outFile)
                     withContext(Dispatchers.Main) { Toast.makeText(this@ScreenRecorderService, "Saved!", Toast.LENGTH_SHORT).show() }
                 } catch (e: Exception) { Log.e("ZZZGlip", "Merge failed", e) }
+>>>>>>> main
             }
         }
     }
