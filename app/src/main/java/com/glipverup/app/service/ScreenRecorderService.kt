@@ -4,6 +4,7 @@ import android.app.*
 import android.content.*
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
+import android.content.res.Configuration
 import android.hardware.display.VirtualDisplay
 import android.media.MediaRecorder
 import android.media.projection.MediaProjection
@@ -196,6 +197,7 @@ class ScreenRecorderService : Service() {
         }
         
         val res = when(resStr) {
+        val baseRes = when(resStr) {
             "480p" -> Pair(854, 480)
             "1080p" -> Pair(1920, 1080)
             "1440p" -> Pair(2560, 1440)
@@ -203,14 +205,23 @@ class ScreenRecorderService : Service() {
             else -> Pair(1280, 720)
         }
 
+        // デバイスの現在の向きに合わせて解像度を調整
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val width = if (isLandscape) maxOf(baseRes.first, baseRes.second) else minOf(baseRes.first, baseRes.second)
+        val height = if (isLandscape) minOf(baseRes.first, baseRes.second) else maxOf(baseRes.first, baseRes.second)
+
         val file = File(cacheDir, "seg_${System.currentTimeMillis()}.mp4")
         segments.add(file)
 
         // Keep buffer for max possible time (7 min)
         while (segments.size * segmentDurationMs > 8 * 60 * 1000) {
+        // Keep buffer for max possible time (6 min + 1 min margin)
+        while (segments.size * segmentDurationMs > 7 * 60 * 1000) {
             val oldest = segments.removeFirst()
             if (oldest.exists()) oldest.delete()
         }
+
+        Log.d("ZZZGlip", "Setting up MediaRecorder: ${width}x${height}, Landscape=$isLandscape")
 
         mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(this)
@@ -221,20 +232,29 @@ class ScreenRecorderService : Service() {
 
         mediaRecorder?.apply {
             setVideoSource(MediaRecorder.VideoSource.SURFACE)
+            // 内部音声/マイクの録音設定を追加
+            setAudioSource(MediaRecorder.AudioSource.MIC) 
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setVideoEncoder(MediaRecorder.VideoEncoder.H264)
             setVideoSize(res.first, res.second)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            setVideoSize(width, height)
             setVideoFrameRate(fps)
             setVideoEncodingBitRate(bitrateMbps * 1024 * 1024)
+            setAudioEncodingBitRate(128 * 1024)
+            setAudioSamplingRate(44100)
             setOutputFile(file.absolutePath)
             prepare()
         }
 
         val surface = mediaRecorder?.surface
-        if (virtualDisplay == null) {
+
+        // 向きが変わっている、または未作成の場合はVirtualDisplayを更新
+        if (virtualDisplay == null || virtualDisplay?.display?.rotation != windowManager.defaultDisplay.rotation) {
+            virtualDisplay?.release()
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "ZZZGlipCapture",
-                res.first, res.second, metrics.densityDpi,
+                width, height, metrics.densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 surface, null, null
             )
@@ -263,10 +283,16 @@ class ScreenRecorderService : Service() {
         
         serviceScope.launch {
             // 1. Stop current segment to make it playable
+            delay(500) // 最後の数秒が切れるのを防ぐためのバッファ
             stopCurrentSegment()
             
             val durationMs = when(currentBufferTime) {
                 "7 min" -> 7 * 60 * 1000L
+            val resolution = settingsManager.resolutionFlow.first()
+            
+            // 解像度に基づいた制限ロジック
+            val rawDurationMs = when(currentBufferTime) {
+                "7 min", "6 min" -> 6 * 60 * 1000L
                 "5 min" -> 5 * 60 * 1000L
                 "3 min" -> 3 * 60 * 1000L
                 "1 min" -> 60 * 1000L
@@ -274,6 +300,10 @@ class ScreenRecorderService : Service() {
                 "15 sec" -> 15 * 1000L
                 else -> 15 * 1000L
             }
+
+            val durationMs = if (resolution == "1440p") minOf(rawDurationMs, 30 * 1000L)
+                             else if (resolution == "1080p") minOf(rawDurationMs, 3 * 60 * 1000L)
+                             else rawDurationMs
 
             // 2. Identify segments
             val availableSegments = segments.filter { it.exists() && it.length() > 0 }
