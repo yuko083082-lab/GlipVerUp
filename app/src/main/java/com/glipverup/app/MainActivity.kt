@@ -12,15 +12,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.google.android.gms.ads.MobileAds
+import com.glipverup.app.BuildConfig
 import com.glipverup.app.service.ScreenRecorderService
 import com.glipverup.app.ui.screens.MainScreen
 import com.glipverup.app.ui.screens.SettingsScreen
 import com.glipverup.app.ui.theme.AppTheme
 import com.glipverup.app.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var projectionManager: MediaProjectionManager
@@ -53,6 +58,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize Mobile Ads SDK (Disabled in Debug)
+        if (!BuildConfig.DEBUG) {
+            MobileAds.initialize(this) {}
+        }
+
         projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"), Context.RECEIVER_NOT_EXPORTED)
@@ -61,6 +72,7 @@ class MainActivity : ComponentActivity() {
         }
         
         requestNotificationPermission()
+        validateSettings()
 
         setContent {
             AppTheme {
@@ -129,6 +141,24 @@ class MainActivity : ComponentActivity() {
             val permission = "android.permission.POST_NOTIFICATIONS"
             if (checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(permission), 102)
+            }
+        }
+    }
+
+    private fun validateSettings() {
+        val settingsManager = com.glipverup.app.data.SettingsManager(this)
+        val validTimes = listOf("6 min", "5 min", "3 min", "1 min", "30 sec", "15 sec")
+        val validResolutions = listOf("480p", "720p", "1080p", "1440p")
+        
+        lifecycleScope.launch {
+            val currentTime = settingsManager.bufferTimeFlow.first()
+            val currentRes = settingsManager.resolutionFlow.first()
+            
+            if (currentTime !in validTimes) {
+                settingsManager.updateBufferTime("5 min")
+            }
+            if (currentRes !in validResolutions) {
+                settingsManager.updateResolution("1080p")
             }
         }
     }

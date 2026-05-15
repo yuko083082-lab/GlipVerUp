@@ -31,7 +31,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8)
 
     val bufferTime: StateFlow<String> = settingsManager.bufferTimeFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "7 min")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "3 min")
+
+    val isWipeoutEnabled: StateFlow<Boolean> = settingsManager.wipeoutDetectionFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     fun updateRecordingState(recording: Boolean) {
         isRecording = recording
@@ -39,37 +42,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateBufferTime(value: String) {
         viewModelScope.launch {
-            if (resolution.value == "4K") {
-                if (value == "30 sec" || value == "15 sec") {
-                    settingsManager.updateBufferTime(value)
-                }
-            } else {
-                settingsManager.updateBufferTime(value)
-            }
+            settingsManager.updateBufferTime(value)
+        }
+    }
+
+    fun updateWipeoutDetection(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.updateWipeoutDetection(enabled)
         }
     }
 
     fun updateQuality(value: String) {
-        viewModelScope.launch { settingsManager.updateQuality(value) }
+        viewModelScope.launch {
+            settingsManager.updateQuality(value)
+            when (value) {
+                "Low" -> {
+                    settingsManager.updateResolution("720p")
+                    settingsManager.updateFps(30)
+                    settingsManager.updateBitrate(4)
+                }
+                "Medium" -> {
+                    settingsManager.updateResolution("1080p")
+                    settingsManager.updateFps(30)
+                    settingsManager.updateBitrate(8)
+                }
+                "High" -> {
+                    settingsManager.updateResolution("1080p")
+                    settingsManager.updateFps(60)
+                    settingsManager.updateBitrate(12)
+                }
+            }
+        }
     }
 
     fun updateResolution(value: String) {
         viewModelScope.launch {
             settingsManager.updateResolution(value)
-            if (value == "4K") {
-                val current = bufferTime.value
-                if (current != "30 sec" && current != "15 sec") {
-                    settingsManager.updateBufferTime("30 sec")
-                }
-            }
+            settingsManager.updateQuality("Custom")
         }
     }
 
     fun updateFps(value: Int) {
-        viewModelScope.launch { settingsManager.updateFps(value) }
+        viewModelScope.launch {
+            settingsManager.updateFps(value)
+            settingsManager.updateQuality("Custom")
+        }
     }
 
     fun updateBitrate(value: Int) {
-        viewModelScope.launch { settingsManager.updateBitrate(value) }
+        viewModelScope.launch {
+            settingsManager.updateBitrate(value)
+            settingsManager.updateQuality("Custom")
+        }
     }
 }

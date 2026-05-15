@@ -11,6 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.glipverup.app.BuildConfig
 
 @Composable
 fun MainScreen(
@@ -46,6 +51,22 @@ fun MainScreen(
                 text = if (isRecording) "STOP" else "REC",
                 fontSize = 32.sp,
                 color = Color.White
+            )
+        }
+
+        // Ad Banner at the bottom
+        if (!BuildConfig.DEBUG) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter),
+                factory = { context ->
+                    AdView(context).apply {
+                        setAdSize(AdSize.BANNER)
+                        adUnitId = "ca-app-pub-3940256099942544/6300978111" // Test ID
+                        loadAd(AdRequest.Builder().build())
+                    }
+                }
             )
         }
     }

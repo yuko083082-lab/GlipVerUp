@@ -54,6 +54,25 @@
     <string msgid="406453423630273620" name="close_drawer">"Zatvaranje navigacionog menija"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Zatvaranje tabele"</string>
     <string msgid="5389587048670450460" name="collapsed">"Suženo"</string>
+    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">Omogući</string>
+    <string msgid="227660514972886228" name="common_google_play_services_enable_text">Aplikacija %1$s neće raditi ako ne omogućite Google Play usluge.</string>
+    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Omogućite Google Play usluge</string>
+    <string msgid="7153882981874058840" name="common_google_play_services_install_button">Instaliraj</string>
+    <string name="common_google_play_services_install_text">Aplikacija %1$s neće raditi bez Google Play usluga, kojih na vašem uređaju nema.</string>
+    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Nabavite Google Play usluge</string>
+    <string name="common_google_play_services_notification_channel_name">Dostupnost Google Play usluga</string>
+    <string name="common_google_play_services_notification_ticker">Greška Google Play usluge</string>
+    <string name="common_google_play_services_unknown_issue">Aplikacija %1$s ima problema s Google Play uslugama. Pokušajte ponovo.</string>
+    <string name="common_google_play_services_unsupported_text">Aplikacija %1$s neće raditi bez Google Play usluga, koje vaš uređaj ne podržava.</string>
+    <string msgid="6556509956452265614" name="common_google_play_services_update_button">Ažuriraj</string>
+    <string msgid="9053896323427875356" name="common_google_play_services_update_text">Aplikacija %1$s neće raditi ako ne ažurirate Google Play usluge.</string>
+    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Ažuriranje Google Play usluga</string>
+    <string name="common_google_play_services_updating_text">Aplikacija %1$s neće raditi bez Google Play usluga, koje se trenutno ažuriraju.</string>
+    <string name="common_google_play_services_wear_update_text">Potrebna je nova verzija Google Play usluga. Ubrzo će se samo ažurirati.</string>
+    <string name="common_open_on_phone">Otvori na telefonu</string>
+    <string name="common_signin_button_text">Prijava</string>
+    <string name="common_signin_button_text_long">Prijavi se pomoću Googlea</string>
+    <string msgid="3260749812566568062" name="copy_toast_msg">"Link je kopiran u međumemoriju"</string>
     <string msgid="3499643850558715142" name="date_input_headline">"Unesen je datum"</string>
     <string msgid="8562356184193964298" name="date_input_headline_description">"Unesen je datum: %1$s"</string>
     <string msgid="5281836720766682161" name="date_input_invalid_for_pattern">"Datumi se ne podudaraju s očekivanim obrascem: %1$s"</string>
@@ -101,6 +120,9 @@
     <string name="exo_download_removing">Uklanjanje preuzimanja</string>
     <string msgid="5974471714631304645" name="expanded">"Prošireno"</string>
     <string name="exposed_dropdown_menu_content_description">Prikaži padajući meni</string>
+    <string msgid="4566929209979330987" name="fallback_menu_item_copy_link">"Kopiraj link"</string>
+    <string msgid="3413186855122069269" name="fallback_menu_item_open_in_browser">"Otvori u pregledniku"</string>
+    <string msgid="7145444925855055364" name="fallback_menu_item_share_link">"Dijeli link"</string>
     <string name="icon_content_description">ikona dijaloškog okvira</string>
     <string msgid="6827826412747255547" name="in_progress">"U toku"</string>
     <string msgid="7933458017204019916" name="indeterminate">"Djelimično označeno"</string>
@@ -160,13 +182,33 @@
     <string name="mtrl_picker_toggle_to_year_selection">Prebacivanje dodirom na prikaz godine</string>
     <string name="mtrl_timepicker_cancel">Otkaži</string>
     <string name="mtrl_timepicker_confirm">Uredu</string>
+    <string name="native_body">Tekst</string>
+    <string name="native_headline">Naslov</string>
+    <string name="native_media_view">Prikaz medija</string>
     <string msgid="542007171693138492" name="navigation_menu">"Meni za navigaciju"</string>
     <string msgid="6610465462668679431" name="not_selected">"Nije odabrano"</string>
+    <string name="notifications_permission_confirm">Dozvoli</string>
+    <string name="notifications_permission_decline">Nemoj dozvoliti</string>
+    <string name="notifications_permission_title">Dozvoliti aplikaciji da vam šalje obavještenja?</string>
     <string msgid="875452955155264703" name="off">"Isključeno"</string>
+    <string name="offline_dialog_image_description">Ikona</string>
+    <string name="offline_dialog_text">Dobit ćete obavještenje s linkom kada ponovo budete online</string>
+    <string name="offline_notification_title">Pogledajte sačuvani oglas kada ponovo budete online</string>
+    <string name="offline_opt_in_confirm">UREDU</string>
+    <string name="offline_opt_in_decline">Ne, hvala</string>
+    <string name="offline_opt_in_message">Poslat ćemo vam obavještenje s linkom na web lokaciju oglašivača.</string>
+    <string name="offline_opt_in_title">Otvorite oglas kada ponovo budete online.</string>
     <string msgid="8655164131929253426" name="on">"Uključeno"</string>
     <string name="password_toggle_content_description">Prikaži lozinku</string>
     <string msgid="5941395253238309765" name="range_end">"Kraj raspona"</string>
     <string msgid="7097486360902471446" name="range_start">"Početak raspona"</string>
+    <string name="s1">Sačuvaj sliku</string>
+    <string name="s2">Želite li dozvoliti oglasu da pohrani sliku u Galeriju slika?</string>
+    <string name="s3">Prihvati</string>
+    <string name="s4">Odbij</string>
+    <string name="s5">Kreiranje događaja u kalendaru</string>
+    <string name="s6">Želite li dozvoliti oglasu da kreira događaj u kalendaru?</string>
+    <string name="s7">Probni oglas</string>
     <string msgid="6420018528474762666" name="search_bar_search">"Pretraživanje"</string>
     <string msgid="6264217191555673260" name="search_menu_title">"Pretražite"</string>
     <string msgid="6043586758067023" name="selected">"Odabrano"</string>
@@ -190,4 +232,5 @@
     <string msgid="2232702812657998674" name="time_picker_pm">"poslijepodne"</string>
     <string msgid="2732804537909054941" name="tooltip_long_press_label">"Prikaži skočni opis"</string>
     <string msgid="8191239805703103845" name="tooltip_pane_description">"Skočni opis"</string>
+    <string name="watermark_label_prefix">AdMob – </string>
 </resources>

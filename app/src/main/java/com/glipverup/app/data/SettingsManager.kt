@@ -17,10 +17,33 @@ class SettingsManager(private val context: Context) {
         val FPS_KEY = intPreferencesKey("fps")
         val BITRATE_KEY = intPreferencesKey("bitrate")
         val BUFFER_TIME_KEY = stringPreferencesKey("buffer_time")
+        val FLOATING_X_KEY = intPreferencesKey("floating_x")
+        val FLOATING_Y_KEY = intPreferencesKey("floating_y")
+        val WIPEOUT_DETECTION_KEY = booleanPreferencesKey("wipeout_detection")
+    }
+
+    val floatingXFlow: Flow<Int?> = context.dataStore.data.map { it[FLOATING_X_KEY] }
+    val floatingYFlow: Flow<Int?> = context.dataStore.data.map { it[FLOATING_Y_KEY] }
+
+    val wipeoutDetectionFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[WIPEOUT_DETECTION_KEY] ?: false
+    }
+
+    suspend fun updateWipeoutDetection(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[WIPEOUT_DETECTION_KEY] = enabled
+        }
+    }
+
+    suspend fun saveFloatingPosition(x: Int, y: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[FLOATING_X_KEY] = x
+            preferences[FLOATING_Y_KEY] = y
+        }
     }
 
     val bufferTimeFlow: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[BUFFER_TIME_KEY] ?: "7 min"
+        preferences[BUFFER_TIME_KEY] ?: "6 min"
     }
 
     suspend fun updateBufferTime(bufferTime: String) {

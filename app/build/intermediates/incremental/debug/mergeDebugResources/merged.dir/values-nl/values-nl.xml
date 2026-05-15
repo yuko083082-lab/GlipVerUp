@@ -53,6 +53,25 @@
     <string msgid="406453423630273620" name="close_drawer">"Navigatiemenu sluiten"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Blad sluiten"</string>
     <string msgid="5389587048670450460" name="collapsed">"Samengevouwen"</string>
+    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">Aanzetten</string>
+    <string msgid="227660514972886228" name="common_google_play_services_enable_text">%1$s werkt niet, tenzij je Google Play-services aanzet.</string>
+    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Google Play-services aanzetten</string>
+    <string msgid="7153882981874058840" name="common_google_play_services_install_button">Installeren</string>
+    <string name="common_google_play_services_install_text">%1$s kan niet worden uitgevoerd zonder Google Play-services, die je nog niet op je apparaat hebt.</string>
+    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Google Play-services ophalen</string>
+    <string name="common_google_play_services_notification_channel_name">Beschikbaarheid van Google Play-services</string>
+    <string name="common_google_play_services_notification_ticker">Fout met Google Play-services</string>
+    <string name="common_google_play_services_unknown_issue">%1$s ondervindt problemen met Google Play-services. Probeer het opnieuw.</string>
+    <string name="common_google_play_services_unsupported_text">%1$s kan niet worden uitgevoerd zonder Google Play-services, die niet worden ondersteund op je apparaat.</string>
+    <string msgid="6556509956452265614" name="common_google_play_services_update_button">Updaten</string>
+    <string msgid="9053896323427875356" name="common_google_play_services_update_text">%1$s kan niet worden uitgevoerd, tenzij je Google Play-services updatet.</string>
+    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Google Play-services updaten</string>
+    <string name="common_google_play_services_updating_text">%1$s kan niet worden uitgevoerd zonder Google Play-services, die momenteel worden geüpdatet.</string>
+    <string name="common_google_play_services_wear_update_text">Er is een nieuwe versie van Google Play-services vereist. De update wordt binnenkort automatisch uitgevoerd.</string>
+    <string name="common_open_on_phone">Openen op telefoon</string>
+    <string name="common_signin_button_text">Inloggen</string>
+    <string name="common_signin_button_text_long">Inloggen met Google</string>
+    <string msgid="3260749812566568062" name="copy_toast_msg">"Link naar klembord gekopieerd"</string>
     <string msgid="3499643850558715142" name="date_input_headline">"Opgegeven datum"</string>
     <string msgid="8562356184193964298" name="date_input_headline_description">"Opgegeven datum: %1$s"</string>
     <string msgid="5281836720766682161" name="date_input_invalid_for_pattern">"De datum komt niet overeen met het verwachte patroon: %1$s"</string>
@@ -100,6 +119,9 @@
     <string name="exo_download_removing">Downloads verwijderen</string>
     <string msgid="5974471714631304645" name="expanded">"Uitgevouwen"</string>
     <string name="exposed_dropdown_menu_content_description">Dropdownmenu tonen</string>
+    <string msgid="4566929209979330987" name="fallback_menu_item_copy_link">"Link kopiëren"</string>
+    <string msgid="3413186855122069269" name="fallback_menu_item_open_in_browser">"Openen in browser"</string>
+    <string msgid="7145444925855055364" name="fallback_menu_item_share_link">"Link delen"</string>
     <string name="icon_content_description">Icoon voor dialoogvenster</string>
     <string msgid="6827826412747255547" name="in_progress">"Bezig"</string>
     <string msgid="7933458017204019916" name="indeterminate">"Gedeeltelijk aangevinkt"</string>
@@ -159,13 +181,33 @@
     <string name="mtrl_picker_toggle_to_year_selection">Tik om over te schakelen naar de jaarweergave</string>
     <string name="mtrl_timepicker_cancel">Annuleren</string>
     <string name="mtrl_timepicker_confirm">OK</string>
+    <string name="native_body">Tekstgedeelte</string>
+    <string name="native_headline">Kop</string>
+    <string name="native_media_view">Mediacontent</string>
     <string msgid="542007171693138492" name="navigation_menu">"Navigatiemenu"</string>
     <string msgid="6610465462668679431" name="not_selected">"Niet geselecteerd"</string>
+    <string name="notifications_permission_confirm">Toestaan</string>
+    <string name="notifications_permission_decline">Niet toestaan</string>
+    <string name="notifications_permission_title">App toestaan om je meldingen te sturen?</string>
     <string msgid="875452955155264703" name="off">"Uit"</string>
+    <string name="offline_dialog_image_description">Icoon</string>
+    <string name="offline_dialog_text">Je krijgt een melding met de link als je weer online bent</string>
+    <string name="offline_notification_title">De advertentie bekijken die je hebt opgeslagen toen je offline was</string>
+    <string name="offline_opt_in_confirm">OK</string>
+    <string name="offline_opt_in_decline">Nee, bedankt</string>
+    <string name="offline_opt_in_message">We sturen je een melding met een link naar de site van de adverteerder.</string>
+    <string name="offline_opt_in_title">Advertentie openen als je weer online bent</string>
     <string msgid="8655164131929253426" name="on">"Aan"</string>
     <string name="password_toggle_content_description">Wachtwoord tonen</string>
     <string msgid="5941395253238309765" name="range_end">"Einde bereik"</string>
     <string msgid="7097486360902471446" name="range_start">"Start bereik"</string>
+    <string name="s1">Afbeelding opslaan</string>
+    <string name="s2">Advertentie toestaan om afbeelding op te slaan in fotogalerij?</string>
+    <string name="s3">Accepteren</string>
+    <string name="s4">Weigeren</string>
+    <string name="s5">Agenda-afspraak maken</string>
+    <string name="s6">Advertentie toestaan om een agenda-afspraak te maken?</string>
+    <string name="s7">Testadvertentie</string>
     <string msgid="6420018528474762666" name="search_bar_search">"Zoeken"</string>
     <string msgid="6264217191555673260" name="search_menu_title">"Zoeken"</string>
     <string msgid="6043586758067023" name="selected">"Geselecteerd"</string>
@@ -189,4 +231,5 @@
     <string msgid="2232702812657998674" name="time_picker_pm">"PM"</string>
     <string msgid="2732804537909054941" name="tooltip_long_press_label">"Tooltip tonen"</string>
     <string msgid="8191239805703103845" name="tooltip_pane_description">"Tooltip"</string>
+    <string name="watermark_label_prefix">AdMob - </string>
 </resources>

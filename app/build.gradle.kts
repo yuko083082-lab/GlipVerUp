@@ -42,6 +42,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -80,6 +81,12 @@ dependencies {
     implementation("androidx.media3:media3-common:1.1.1")
     implementation("androidx.media3:media3-transformer:1.1.1")
     implementation("androidx.media3:media3-effect:1.1.1")
+
+    // ML Kit for WIPEOUT detection
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+
+    // Google Mobile Ads
+    implementation("com.google.android.gms:play-services-ads:23.0.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

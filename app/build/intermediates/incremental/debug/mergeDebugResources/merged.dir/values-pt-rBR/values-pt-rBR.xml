@@ -53,6 +53,25 @@
     <string msgid="406453423630273620" name="close_drawer">"Fechar menu de navegação"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Fechar planilha"</string>
     <string msgid="5389587048670450460" name="collapsed">"Fechado"</string>
+    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">Ativar</string>
+    <string msgid="227660514972886228" name="common_google_play_services_enable_text">%1$s só funciona com o Google Play Services ativado.</string>
+    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Ativar o Google Play Services</string>
+    <string msgid="7153882981874058840" name="common_google_play_services_install_button">Instalar</string>
+    <string name="common_google_play_services_install_text">O app %1$s não funciona sem o Google Play Services, o qual não está instalado no seu dispositivo.</string>
+    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Instalar o Google Play Services</string>
+    <string name="common_google_play_services_notification_channel_name">Disponibilidade do Google Play Services</string>
+    <string name="common_google_play_services_notification_ticker">Erro do Google Play Services</string>
+    <string name="common_google_play_services_unknown_issue">O app %1$s está com problemas com o Google Play Services. Tente novamente.</string>
+    <string name="common_google_play_services_unsupported_text">O app %1$s não funciona sem o Google Play Services, o qual não é compatível com seu dispositivo.</string>
+    <string msgid="6556509956452265614" name="common_google_play_services_update_button">Atualizar</string>
+    <string msgid="9053896323427875356" name="common_google_play_services_update_text">%1$s só funciona com uma versão atualizada do Google Play Services.</string>
+    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Atualizar o Google Play Services</string>
+    <string name="common_google_play_services_updating_text">%1$s não funciona sem o Google Play Services, o qual está sendo atualizado no momento.</string>
+    <string name="common_google_play_services_wear_update_text">É necessária uma nova versão do Google Play Services. Ele será atualizado em breve.</string>
+    <string name="common_open_on_phone">Abrir no smartphone</string>
+    <string name="common_signin_button_text">Fazer login</string>
+    <string name="common_signin_button_text_long">Fazer login com o Google</string>
+    <string msgid="3260749812566568062" name="copy_toast_msg">"Link copiado para a área de transferência"</string>
     <string msgid="3499643850558715142" name="date_input_headline">"Data inserida"</string>
     <string msgid="8562356184193964298" name="date_input_headline_description">"Data inserida: %1$s"</string>
     <string msgid="5281836720766682161" name="date_input_invalid_for_pattern">"A data não está no padrão esperado: %1$s"</string>
@@ -91,6 +110,9 @@
     <string name="error_icon_content_description">Erro</string>
     <string msgid="5974471714631304645" name="expanded">"Aberto"</string>
     <string name="exposed_dropdown_menu_content_description">Mostrar menu suspenso</string>
+    <string msgid="4566929209979330987" name="fallback_menu_item_copy_link">"Copiar link"</string>
+    <string msgid="3413186855122069269" name="fallback_menu_item_open_in_browser">"Abrir no navegador"</string>
+    <string msgid="7145444925855055364" name="fallback_menu_item_share_link">"Compartilhar link"</string>
     <string name="icon_content_description">Ícone de caixa de diálogo</string>
     <string msgid="6827826412747255547" name="in_progress">"Em andamento"</string>
     <string msgid="7933458017204019916" name="indeterminate">"Parcialmente selecionada"</string>
@@ -150,13 +172,33 @@
     <string name="mtrl_picker_toggle_to_year_selection">Toque para mudar para a visualização \"Ano\"</string>
     <string name="mtrl_timepicker_cancel">Cancelar</string>
     <string name="mtrl_timepicker_confirm">OK</string>
+    <string name="native_body">Corpo</string>
+    <string name="native_headline">Título</string>
+    <string name="native_media_view">Visualização de mídia</string>
     <string msgid="542007171693138492" name="navigation_menu">"Menu de navegação"</string>
     <string msgid="6610465462668679431" name="not_selected">"Não selecionado"</string>
+    <string name="notifications_permission_confirm">Permitir</string>
+    <string name="notifications_permission_decline">Não permitir</string>
+    <string name="notifications_permission_title">Permitir que o app envie notificações?</string>
     <string msgid="875452955155264703" name="off">"Desativado"</string>
+    <string name="offline_dialog_image_description">Ícone</string>
+    <string name="offline_dialog_text">Você vai receber uma notificação com o link quando ficar on-line novamente</string>
+    <string name="offline_notification_title">Ver o anúncio que você salvou quando estava off-line</string>
+    <string name="offline_opt_in_confirm">OK</string>
+    <string name="offline_opt_in_decline">Não</string>
+    <string name="offline_opt_in_message">Enviaremos uma notificação com um link para o site do anunciante.</string>
+    <string name="offline_opt_in_title">Abrir o anúncio quando você ficar on-line novamente.</string>
     <string msgid="8655164131929253426" name="on">"Ativado"</string>
     <string name="password_toggle_content_description">Exibir senha</string>
     <string msgid="5941395253238309765" name="range_end">"Fim do intervalo"</string>
     <string msgid="7097486360902471446" name="range_start">"Início do intervalo"</string>
+    <string name="s1">Salvar imagem</string>
+    <string name="s2">Permitir que os anúncios armazenem imagens na galeria de imagens?</string>
+    <string name="s3">Aceitar</string>
+    <string name="s4">Recusar</string>
+    <string name="s5">Criar evento na agenda</string>
+    <string name="s6">Permitir que os anúncios criem um evento na agenda?</string>
+    <string name="s7">Anúncio de teste</string>
     <string msgid="6420018528474762666" name="search_bar_search">"Pesquisa"</string>
     <string msgid="6264217191555673260" name="search_menu_title">"Pesquisar"</string>
     <string msgid="6043586758067023" name="selected">"Selecionado"</string>
@@ -180,4 +222,5 @@
     <string msgid="2232702812657998674" name="time_picker_pm">"PM"</string>
     <string msgid="2732804537909054941" name="tooltip_long_press_label">"Mostrar dica"</string>
     <string msgid="8191239805703103845" name="tooltip_pane_description">"Dica"</string>
+    <string name="watermark_label_prefix">AdMob - </string>
 </resources>

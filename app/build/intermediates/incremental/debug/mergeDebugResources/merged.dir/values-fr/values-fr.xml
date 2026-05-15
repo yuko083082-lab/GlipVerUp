@@ -53,6 +53,25 @@
     <string msgid="406453423630273620" name="close_drawer">"Fermer le menu de navigation"</string>
     <string msgid="7573152094250666567" name="close_sheet">"Fermer la feuille"</string>
     <string msgid="5389587048670450460" name="collapsed">"Réduit"</string>
+    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">Activer</string>
+    <string msgid="227660514972886228" name="common_google_play_services_enable_text">%1$s ne fonctionnera pas tant que vous n\'aurez pas activé les services Google Play.</string>
+    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Activer les services Google Play</string>
+    <string msgid="7153882981874058840" name="common_google_play_services_install_button">Installer</string>
+    <string name="common_google_play_services_install_text">%1$s ne fonctionnera pas sans les services Google Play, qui ne sont pas installés sur votre appareil.</string>
+    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Installer les services Google Play</string>
+    <string name="common_google_play_services_notification_channel_name">Disponibilité des services Google Play</string>
+    <string name="common_google_play_services_notification_ticker">Erreur liée aux services Google Play</string>
+    <string name="common_google_play_services_unknown_issue">L\'application %1$s rencontre des problèmes avec les services Google Play. Veuillez réessayer.</string>
+    <string name="common_google_play_services_unsupported_text">%1$s ne fonctionnera pas sans les services Google Play, qui ne sont pas compatibles avec votre appareil.</string>
+    <string msgid="6556509956452265614" name="common_google_play_services_update_button">Mettre à jour</string>
+    <string msgid="9053896323427875356" name="common_google_play_services_update_text">%1$s ne fonctionnera pas tant que vous n\'aurez pas mis à jour les services Google Play.</string>
+    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Mettre à jour les services Google Play</string>
+    <string name="common_google_play_services_updating_text">%1$s ne fonctionnera pas sans les services Google Play, qui sont en cours de mise à jour.</string>
+    <string name="common_google_play_services_wear_update_text">La nouvelle version des services Google Play est nécessaire. Elle sera bientôt installée automatiquement.</string>
+    <string name="common_open_on_phone">Ouvrir sur le téléphone</string>
+    <string name="common_signin_button_text">Se connecter</string>
+    <string name="common_signin_button_text_long">Se connecter avec Google</string>
+    <string msgid="3260749812566568062" name="copy_toast_msg">"Lien copié dans le presse-papiers"</string>
     <string msgid="3499643850558715142" name="date_input_headline">"Date saisie"</string>
     <string msgid="8562356184193964298" name="date_input_headline_description">"Date saisie : %1$s"</string>
     <string msgid="5281836720766682161" name="date_input_invalid_for_pattern">"La date ne correspond pas au format attendu : %1$s"</string>
@@ -100,6 +119,9 @@
     <string name="exo_download_removing">Suppression des téléchargements…</string>
     <string msgid="5974471714631304645" name="expanded">"Développé"</string>
     <string name="exposed_dropdown_menu_content_description">Afficher le menu déroulant</string>
+    <string msgid="4566929209979330987" name="fallback_menu_item_copy_link">"Copier le lien"</string>
+    <string msgid="3413186855122069269" name="fallback_menu_item_open_in_browser">"Ouvrir dans un navigateur"</string>
+    <string msgid="7145444925855055364" name="fallback_menu_item_share_link">"Partager le lien"</string>
     <string name="icon_content_description">Icône de la boîte de dialogue</string>
     <string msgid="6827826412747255547" name="in_progress">"En cours"</string>
     <string msgid="7933458017204019916" name="indeterminate">"Partiellement coché"</string>
@@ -159,13 +181,33 @@
     <string name="mtrl_picker_toggle_to_year_selection">Appuyer pour passer à la vue \"Année\"</string>
     <string name="mtrl_timepicker_cancel">Annuler</string>
     <string name="mtrl_timepicker_confirm">OK</string>
+    <string name="native_body">Corps</string>
+    <string name="native_headline">Titre</string>
+    <string name="native_media_view">Vue multimédia</string>
     <string msgid="542007171693138492" name="navigation_menu">"Menu de navigation"</string>
     <string msgid="6610465462668679431" name="not_selected">"Non sélectionné"</string>
+    <string name="notifications_permission_confirm">Autoriser</string>
+    <string name="notifications_permission_decline">Ne pas autoriser</string>
+    <string name="notifications_permission_title">Autoriser l\'appli à vous envoyer des notifications ?</string>
     <string msgid="875452955155264703" name="off">"Désactivé"</string>
+    <string name="offline_dialog_image_description">Icône</string>
+    <string name="offline_dialog_text">Vous recevrez une notification contenant le lien lorsque vous serez à nouveau connecté à Internet</string>
+    <string name="offline_notification_title">Afficher l\'annonce que vous avez enregistrée lorsque vous n\'aviez pas accès à Internet</string>
+    <string name="offline_opt_in_confirm">OK</string>
+    <string name="offline_opt_in_decline">Non, merci</string>
+    <string name="offline_opt_in_message">Nous vous enverrons une notification contenant un lien vers le site de l\'annonceur.</string>
+    <string name="offline_opt_in_title">Ouvrez l\'annonce lorsque vous serez à nouveau connecté à Internet.</string>
     <string msgid="8655164131929253426" name="on">"Activé"</string>
     <string name="password_toggle_content_description">Afficher le mot de passe</string>
     <string msgid="5941395253238309765" name="range_end">"Fin de plage"</string>
     <string msgid="7097486360902471446" name="range_start">"Début de plage"</string>
+    <string name="s1">Enregistrer l\'image</string>
+    <string name="s2">Autoriser l\'annonce à stocker l\'image dans la galerie d\'images ?</string>
+    <string name="s3">Accepter</string>
+    <string name="s4">Refuser</string>
+    <string name="s5">Créer un événement d\'agenda</string>
+    <string name="s6">Autoriser l\'annonce à créer un événement d\'agenda ?</string>
+    <string name="s7">Annonce test</string>
     <string msgid="6420018528474762666" name="search_bar_search">"Rechercher"</string>
     <string msgid="6264217191555673260" name="search_menu_title">"Rechercher"</string>
     <string msgid="6043586758067023" name="selected">"Sélectionné"</string>
@@ -189,4 +231,5 @@
     <string msgid="2232702812657998674" name="time_picker_pm">"PM"</string>
     <string msgid="2732804537909054941" name="tooltip_long_press_label">"Afficher l\'info-bulle"</string>
     <string msgid="8191239805703103845" name="tooltip_pane_description">"Info-bulle"</string>
+    <string name="watermark_label_prefix">AdMob - </string>
 </resources>

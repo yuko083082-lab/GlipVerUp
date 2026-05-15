@@ -21,6 +21,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
     val fps by viewModel.fps.collectAsState()
     val bitrate by viewModel.bitrate.collectAsState()
     val bufferTime by viewModel.bufferTime.collectAsState()
+    val isWipeoutEnabled by viewModel.isWipeoutEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -47,14 +48,42 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+            // WIPEOUT Mode Toggle
+            Surface(
+                onClick = { viewModel.updateWipeoutDetection(!isWipeoutEnabled) },
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("WIPEOUTモード", color = Color.White, fontSize = 16.sp)
+                        Text("WIPEOUT時に自動で前後5秒を保存します", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = isWipeoutEnabled,
+                        onCheckedChange = { viewModel.updateWipeoutDetection(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFE53935),
+                            checkedTrackColor = Color(0xFFE53935).copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
+
+            Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 8.dp))
+
             Text("Recording Buffer Time", color = Color.Gray, fontSize = 14.sp)
             Row(modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) {
-                val times = listOf("7 min", "5 min", "3 min", "1 min", "30 sec", "15 sec")
+                val times = listOf("6 min", "5 min", "3 min", "1 min", "30 sec", "15 sec")
                 Column {
                     times.chunked(3).forEach { rowItems ->
                         Row {
                             rowItems.forEach { item ->
-                                val isRestricted = resolution == "4K" && item != "30 sec" && item != "15 sec"
+                                // すべての時間設定を解放
+                                val isRestricted = false
                                 FilterChip(
                                     selected = bufferTime == item,
                                     onClick = { if (!isRestricted) viewModel.updateBufferTime(item) },
@@ -72,38 +101,30 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                     }
                 }
             }
-            if (resolution == "4K") {
-                Text(
-                    "Note: 4K recording is limited to 30s buffer due to performance.",
-                    color = Color(0xFFFFCC00),
-                    fontSize = 11.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
 
             Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 16.dp))
-
-            Text("Quality", color = Color.Gray, fontSize = 14.sp)
+            
+            Text("Presets", color = Color.Gray, fontSize = 14.sp)
             Row(modifier = Modifier.padding(vertical = 8.dp)) {
-                listOf("Custom", "Low", "Medium", "High").forEach { item ->
+                val presets = listOf("Low" to "低", "Medium" to "標準", "High" to "高", "Custom" to "自由")
+                presets.forEach { (key, label) ->
                     FilterChip(
-                        selected = quality == item,
-                        onClick = { viewModel.updateQuality(item) },
-                        label = { Text(item) },
+                        selected = quality == key,
+                        onClick = { viewModel.updateQuality(key) },
+                        label = { Text(label) },
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 }
             }
 
-            Divider(color = Color.DarkGray, modifier = Modifier.padding(vertical = 16.dp))
-
-            Text("Advance", color = Color.Gray, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Advance (Custom)", color = Color.Gray, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Resolution
+            // Resolution - Removed 4K
             Text("Resolution", color = Color.Gray, fontSize = 14.sp)
             Row(modifier = Modifier.padding(vertical = 8.dp)) {
-                listOf("480p", "720p", "1080p", "1440p", "4K").forEach { item ->
+                listOf("480p", "720p", "1080p", "1440p").forEach { item ->
                     FilterChip(
                         selected = resolution == item,
                         onClick = { viewModel.updateResolution(item) },
@@ -139,6 +160,32 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                         onClick = { viewModel.updateBitrate(item) },
                         label = { Text(item.toString()) },
                         modifier = Modifier.padding(end = 8.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // 注意書きの追加
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF1A1A1A)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "⚠️ 注意事項",
+                        color = Color.Yellow,
+                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "1440pや高ビットレート設定で長時間録画を行うと、端末の負荷が高まり、録画が強制終了したり端末が発熱したりする場合があります。動作が不安定な場合は、設定を下げてお試しください。",
+                        color = Color.LightGray,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
                     )
                 }
             }

@@ -1,10 +1,10 @@
 [
     {
-        "merged": "com.glipverup.app-debug-67:/layout_layout_floating_button.xml.flat",
-        "source": "com.glipverup.app-main-69:/layout/layout_floating_button.xml"
+        "merged": "com.glipverup.app-debug-76:/drawable_bg_floating_button.xml.flat",
+        "source": "com.glipverup.app-main-78:/drawable/bg_floating_button.xml"
     },
     {
-        "merged": "com.glipverup.app-debug-67:/drawable_bg_floating_button.xml.flat",
-        "source": "com.glipverup.app-main-69:/drawable/bg_floating_button.xml"
+        "merged": "com.glipverup.app-debug-76:/layout_layout_floating_button.xml.flat",
+        "source": "com.glipverup.app-main-78:/layout/layout_floating_button.xml"
     }
 ]
