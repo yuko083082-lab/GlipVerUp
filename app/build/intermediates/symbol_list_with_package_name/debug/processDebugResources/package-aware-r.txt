@@ -3772,6 +3772,7 @@ string abc_toolbar_collapse_description
 string androidx_startup
 string app_name
 string appbar_scrolling_view_behavior
+string attribution_label
 string bottom_sheet_behavior
 string bottom_sheet_collapse_description
 string bottom_sheet_dismiss_description

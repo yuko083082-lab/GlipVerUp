@@ -12,42 +12,42 @@
 9-->INJECTED
 10
 11    <attribution
-11-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:4:5-81
-12        android:label="@string/app_name"
-12-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:4:46-78
-13        android:tag="screen_record" />
-13-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:4:18-45
+11-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:5-90
+12        android:label="@string/attribution_label"
+12-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:46-87
+13        android:tag="glip_recorder" />
+13-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:18-45
 14
 15    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-15-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:6:5-77
-15-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:6:22-74
+15-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:5-77
+15-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:22-74
 16    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-16-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:5-94
-16-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:22-91
+16-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:5-94
+16-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:22-91
 17    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-17-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:5-88
-17-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:22-85
+17-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:5-88
+17-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:22-85
 18    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-18-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:5-78
-18-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:22-75
+18-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:5-78
+18-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:22-75
 19    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-19-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:5-77
-19-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:22-74
+19-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:5-77
+19-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:22-74
 20    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-20-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:5-71
-20-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:22-68
+20-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:5-71
+20-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:22-68
 21    <uses-permission
-21-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:5-108
+21-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:5-108
 22        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-22-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:22-78
+22-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:22-78
 23        android:maxSdkVersion="28" />
-23-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:79-105
+23-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:79-105
 24    <uses-permission
-24-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:5-107
+24-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:5-107
 25        android:name="android.permission.READ_EXTERNAL_STORAGE"
-25-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:22-77
+25-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:22-77
 26        android:maxSdkVersion="32" />
-26-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:78-104
+26-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:78-104
 27
 28    <!-- Include required permissions for Google Mobile Ads to run -->
 29    <uses-permission android:name="android.permission.INTERNET" />
@@ -113,67 +113,67 @@
 59-->[androidx.core:core:1.12.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\f1e5bd3fdef847b67cd10bd774d433b5\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
 60
 61    <application
-61-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:15:5-45:19
+61-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:5-46:19
 62        android:allowBackup="true"
-62-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:9-35
+62-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:17:9-35
 63        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
 63-->[androidx.core:core:1.12.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\f1e5bd3fdef847b67cd10bd774d433b5\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 64        android:debuggable="true"
 65        android:extractNativeLibs="false"
 65-->INJECTED
 66        android:icon="@android:drawable/sym_def_app_icon"
-66-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:17:9-58
+66-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:18:9-58
 67        android:label="@string/app_name"
-67-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:18:9-41
+67-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:19:9-41
 68        android:supportsRtl="true"
-68-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:19:9-35
+68-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:20:9-35
 69        android:testOnly="true"
 70        android:theme="@android:style/Theme.Material.Light.NoActionBar" >
-70-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:20:9-72
+70-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:21:9-72
 71        <meta-data
-71-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:22:9-24:69
+71-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:23:9-25:69
 72            android:name="com.google.android.gms.ads.APPLICATION_ID"
-72-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:23:13-69
+72-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:24:13-69
 73            android:value="ca-app-pub-3940256099942544~3347511713" />
-73-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:24:13-67
+73-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:25:13-67
 74
 75        <activity
-75-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:26:9-33:20
+75-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:27:9-34:20
 76            android:name="com.glipverup.app.MainActivity"
-76-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:27:13-41
+76-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:28:13-41
 77            android:exported="true" >
-77-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:28:13-36
+77-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:29:13-36
 78            <intent-filter>
-78-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:29:13-32:29
+78-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:30:13-33:29
 79                <action android:name="android.intent.action.MAIN" />
-79-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:30:17-69
-79-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:30:25-66
+79-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:17-69
+79-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:25-66
 80
 81                <category android:name="android.intent.category.LAUNCHER" />
-81-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:17-77
-81-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:27-74
+81-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:32:17-77
+81-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:32:27-74
 82            </intent-filter>
 83        </activity>
 84
 85        <service
-85-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:35:9-39:74
+85-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:36:9-40:74
 86            android:name="com.glipverup.app.service.ScreenRecorderService"
-86-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:36:13-58
+86-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:37:13-58
 87            android:enabled="true"
-87-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:37:13-35
+87-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:38:13-35
 88            android:exported="false"
-88-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:38:13-37
+88-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:39:13-37
 89            android:foregroundServiceType="mediaProjection|microphone" />
-89-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:39:13-71
+89-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:40:13-71
 90
 91        <activity
-91-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:41:9-44:70
+91-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:42:9-45:70
 92            android:name="com.glipverup.app.service.TimeSelectionActivity"
-92-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:42:13-58
+92-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:43:13-58
 93            android:exported="false"
-93-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:43:13-37
+93-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:44:13-37
 94            android:theme="@style/Theme.AppCompat.DayNight.Dialog" />
-94-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:44:13-67
+94-->C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:45:13-67
 95
 96        <service
 96-->[com.google.android.gms:play-services-mlkit-text-recognition-common:19.1.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\a7fc88966828b7dbbc1145454e8ae65d\transformed\jetified-play-services-mlkit-text-recognition-common-19.1.0\AndroidManifest.xml:9:9-15:19

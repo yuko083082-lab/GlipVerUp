@@ -119,10 +119,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startRecorderService(resultCode: Int, data: Intent) {
+        // 毎回新しいIntentとして作成し、前回のデータを引き継がないようにする
         val intent = Intent(this, ScreenRecorderService::class.java).apply {
             action = "START_RECORDING"
             putExtra("resultCode", resultCode)
             putExtra("data", data)
+            // 以前のセッション情報をクリアするためにフラグを追加
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

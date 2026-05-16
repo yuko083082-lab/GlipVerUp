@@ -5,6 +5,7 @@ id btn_save
 id save_progress
 layout layout_floating_button
 string app_name
+string attribution_label
 string rec_button
 string recording
 string stop_button
