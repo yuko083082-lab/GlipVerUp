@@ -41,7 +41,9 @@ class ScreenRecorderService : Service() {
 
     private fun getAttributedContext(): Context {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            applicationContext.createAttributionContext("glip_recorder")
+            val context = this.createAttributionContext("glip_recorder")
+            Log.d("ZZZGlip", "Attribution tag created from Service: ${context.attributionTag}")
+            context
         } else {
             this
         }
@@ -55,6 +57,7 @@ class ScreenRecorderService : Service() {
     private lateinit var settingsManager: SettingsManager
     private var floatingView: View? = null
     private var videoEncoderSurface: Surface? = null
+    private var currentFocusRequest: AudioFocusRequest? = null
 
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
@@ -271,24 +274,25 @@ class ScreenRecorderService : Service() {
                     
                     // Audio Focus (Transient May Duck for ZZZ)
                     val am = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    var focusRequest: AudioFocusRequest? = null
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                        currentFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                             .setAudioAttributes(AudioAttributes.Builder()
                                 .setUsage(AudioAttributes.USAGE_MEDIA)
                                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                 .build())
                             .build()
-                        Log.d("ZZZGlip", "Requesting transient focus")
-                        am.requestAudioFocus(focusRequest)
+                        Log.d("ZZZGlip", "Requesting and holding transient focus")
+                        am.requestAudioFocus(currentFocusRequest!!)
                         delay(200) 
                     }
 
-                    // キャプチャ設定（必須のUSAGEに絞る）
+                    // キャプチャ設定（属性を拡張して漏れを防ぐ）
                     val config = AudioPlaybackCaptureConfiguration.Builder(projection)
                         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                         .addMatchingUsage(AudioAttributes.USAGE_GAME)
                         .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
+                        .addMatchingUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
                         .build()
                         
                     val sampleRate = 48000
@@ -346,9 +350,6 @@ class ScreenRecorderService : Service() {
                         record?.release()
                     }
 
-                    // フォーカス解放
-                    focusRequest?.let { am.abandonAudioFocusRequest(it) }
-
                 } catch (e: Exception) {
                     Log.e("ZZZGlip", "AudioRecord initialization total error", e)
                 }
@@ -391,6 +392,10 @@ class ScreenRecorderService : Service() {
         
         val vW = if (isLandscape) maxOf(baseRes.first, baseRes.second) else minOf(baseRes.first, baseRes.second)
         val vH = if (isLandscape) minOf(baseRes.first, baseRes.second) else maxOf(baseRes.first, baseRes.second)
+
+        // 設定を最新状態に更新
+        isWipeoutDetectionEnabled = settingsManager.wipeoutDetectionFlow.first()
+        Log.d("ZZZGlip", "Wipeout detection status: $isWipeoutDetectionEnabled")
 
         // Video Encoder
         val vFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, vW, vH).apply {
@@ -521,6 +526,7 @@ class ScreenRecorderService : Service() {
     private suspend fun audioRecordingLoop(audioPCMBuffer: ByteBuffer) {
         Log.d("ZZZGlip", "Audio thread started. Recording: ${isRecording.get()}")
         var consecutiveSilentCount = 0
+        var lastStateCheckTime = 0L
         
         audioLoop@while (isRecording.get() && !pendingRotationRestart) {
             val record = audioRecord ?: run { delay(100); break@audioLoop }
@@ -530,6 +536,8 @@ class ScreenRecorderService : Service() {
                 Log.e("ZZZGlip", "AudioRecord.read EXCEPTION", e)
                 -1 
             }
+            
+            val now = System.currentTimeMillis()
             if (read > 0) {
                 var maxVal = 0
                 audioPCMBuffer.position(0)
@@ -546,11 +554,23 @@ class ScreenRecorderService : Service() {
                     consecutiveSilentCount = 0
                 } else {
                     consecutiveSilentCount++
+                    // 無音が続いた場合に状態を詳しくログ出し
+                    if (consecutiveSilentCount % 50 == 0) {
+                        val state = if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) "RECORDING" else "STOPPED"
+                        Log.w("ZZZGlip_AudioDiag", "SILENCE DETECTED. State: $state, SessionId: ${record.audioSessionId}, ReadSize: $read")
+                    }
                 }
 
                 if (audioSampleCount % 100 == 0L) {
                     val state = if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) "RECORDING" else "STOPPED"
                     Log.d("ZZZGlip_Audio", "Read: $read bytes, Max amp: $maxVal, State: $state, Silent: $consecutiveSilentCount")
+                }
+                
+                // 定期的にOSから見た録音状態をチェック（動的な権限剥奪の検知用）
+                if (now - lastStateCheckTime > 5000) {
+                    val state = if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) "RECORDING" else "STOPPED"
+                    Log.i("ZZZGlip_AudioDiag", "Periodic Check - State: $state, AttrTag: ${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) getAttributedContext().attributionTag else "N/A"}")
+                    lastStateCheckTime = now
                 }
                 
                 val inputIndex = try { audioEncoder?.dequeueInputBuffer(1000) ?: -1 } catch (e: Exception) { 
@@ -1059,14 +1079,15 @@ class ScreenRecorderService : Service() {
      */
     private fun startDetectionLoop() {
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        Log.d("ZZZGlip_Detection", "startDetectionLoop() started with 500ms interval")
         serviceScope.launch(Dispatchers.Default) {
             while (isRecording.get() && isWipeoutDetectionEnabled) {
-                delay(500) // 0.5秒おきにチェック
+                delay(500) // ユーザー要望により500msに高速化
                 
                 val vd = virtualDisplay ?: continue
                 
-                // PixelCopyでDisplayの内容を取得 (Android 14の制限によりVirtualDisplayは1つのみ)
-                val bitmap = Bitmap.createBitmap(320, 180, Bitmap.Config.ARGB_8888)
+                // 解像度を 854x480 (480p) に引き上げ
+                val bitmap = Bitmap.createBitmap(854, 480, Bitmap.Config.ARGB_8888)
                 val completable = CompletableDeferred<Int>()
                 
                 withContext(Dispatchers.Main) {
@@ -1077,9 +1098,11 @@ class ScreenRecorderService : Service() {
                                 completable.complete(result)
                             }, handler)
                         } else {
+                            Log.e("ZZZGlip_Detection", "Surface is null or invalid")
                             completable.complete(PixelCopy.ERROR_UNKNOWN)
                         }
                     } catch (e: Exception) {
+                        Log.e("ZZZGlip_Detection", "PixelCopy request exception", e)
                         completable.completeExceptionally(e)
                     }
                 }
@@ -1088,38 +1111,72 @@ class ScreenRecorderService : Service() {
                     val result = completable.await()
                     if (result == PixelCopy.SUCCESS) {
                         val inputImage = InputImage.fromBitmap(bitmap, 0)
-                        recognizer.process(inputImage).addOnSuccessListener { visionText ->
-                            if (visionText.text.isNotBlank()) {
-                                Log.d("ZZZGlip_Detection", "Recognized text: ${visionText.text.take(100).replace("\n", " ")}")
-                            }
-                            for (block in visionText.textBlocks) {
-                                val text = block.text.uppercase().replace(" ", "")
-                                if (isFuzzyMatch(text, "WIPEOUT")) {
-                                    val box = block.boundingBox
-                                    if (box != null) {
-                                        val centerX = box.centerX()
-                                        val centerY = box.centerY()
-                                        val imgW = bitmap.width
-                                        val imgH = bitmap.height
-                                        
-                                        if (centerX > imgW * 0.25 && centerX < imgW * 0.75 &&
-                                            centerY > imgH * 0.25 && centerY < imgH * 0.75) {
+                        recognizer.process(inputImage)
+                            .addOnSuccessListener { visionText ->
+                                if (visionText.text.isNotBlank()) {
+                                    val textClean = visionText.text.take(100).replace("\n", " ")
+                                    Log.d("ZZZGlip_Detection", "OCR SUCCESS. Text: $textClean")
+                                }
+                                for (block in visionText.textBlocks) {
+                                    val text = block.text.uppercase().replace(" ", "")
+                                    
+                                    // デバッグログ: 短い断片でも "W" を含み中央付近なら出力
+                                    if (text.contains("W") || text.contains("I") || text.contains("T")) {
+                                        val box = block.boundingBox
+                                        if (box != null) {
+                                            val centerX = box.centerX()
+                                            val centerY = box.centerY()
+                                            val imgW = bitmap.width
+                                            val imgH = bitmap.height
+                                            if (centerX > imgW * 0.20 && centerX < imgW * 0.80 &&
+                                                centerY > imgH * 0.20 && centerY < imgH * 0.80) {
+                                                Log.d("ZZZGlip_Detection", "Partial/Candidate match found: $text at ($centerX, $centerY)")
+                                            }
+                                        }
+                                    }
+
+                                    if (isFuzzyMatch(text, "WIPEOUT")) {
+                                        Log.i("ZZZGlip_Detection", "WIPEOUT text matched: $text")
+                                        val box = block.boundingBox
+                                        if (box != null) {
+                                            val centerX = box.centerX()
+                                            val centerY = box.centerY()
+                                            val imgW = bitmap.width
+                                            val imgH = bitmap.height
                                             
-                                            val now = System.currentTimeMillis()
-                                            if (now - lastWipeoutDetectionTime > 15000) {
-                                                lastWipeoutDetectionTime = now
-                                                handleWipeoutDetected()
+                                            if (centerX > imgW * 0.20 && centerX < imgW * 0.80 &&
+                                                centerY > imgH * 0.20 && centerY < imgH * 0.80) {
+                                                
+                                                val now = System.currentTimeMillis()
+                                                if (now - lastWipeoutDetectionTime > 15000) {
+                                                    Log.i("ZZZGlip_Detection", "WIPEOUT valid hit! Triggering handleWipeoutDetected")
+                                                    lastWipeoutDetectionTime = now
+                                                    handleWipeoutDetected()
+                                                }
+                                            } else {
+                                                Log.d("ZZZGlip_Detection", "WIPEOUT found but outside center area: ($centerX, $centerY)")
                                             }
                                         }
                                     }
                                 }
                             }
+                            .addOnFailureListener { e ->
+                                Log.e("ZZZGlip_Detection", "OCR Processing failed", e)
+                            }
+                    } else {
+                        val reason = when(result) {
+                            PixelCopy.ERROR_DESTINATION_INVALID -> "DESTINATION_INVALID (Secure Surface?)"
+                            PixelCopy.ERROR_SOURCE_INVALID -> "SOURCE_INVALID"
+                            PixelCopy.ERROR_TIMEOUT -> "TIMEOUT"
+                            else -> "UNKNOWN ($result)"
                         }
+                        Log.w("ZZZGlip_Detection", "PixelCopy failed: $reason")
                     }
                 } catch (e: Exception) {
-                    Log.e("ZZZGlip", "PixelCopy failed", e)
+                    Log.e("ZZZGlip_Detection", "PixelCopy await/process failed", e)
                 }
             }
+            Log.d("ZZZGlip_Detection", "startDetectionLoop() exiting")
             recognizer.close()
         }
     }
@@ -1242,6 +1299,16 @@ class ScreenRecorderService : Service() {
         // 6. 最後に MediaProjection を止める
         mediaProjection?.stop()
         mediaProjection = null
+
+        // Audio Focus 解放
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            currentFocusRequest?.let {
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.abandonAudioFocusRequest(it)
+                Log.d("ZZZGlip", "Audio focus abandoned")
+            }
+            currentFocusRequest = null
+        }
         
         segments.forEach { if (it.exists()) it.delete() }
         segments.clear()
@@ -1258,7 +1325,8 @@ class ScreenRecorderService : Service() {
 
     private fun createNotificationChannel() {
         val attrContext = getAttributedContext()
-        val chan = NotificationChannel(CHANNEL_ID, "ZZZGlip Recorder", NotificationManager.IMPORTANCE_LOW)
+        val chan = NotificationChannel(CHANNEL_ID, "ZZZGlip Recorder", NotificationManager.IMPORTANCE_HIGH)
+        chan.description = "Used for gameplay recording and wipeout detection"
         attrContext.getSystemService(NotificationManager::class.java).createNotificationChannel(chan)
     }
 

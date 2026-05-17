@@ -8,10 +8,6 @@
         android:minSdkVersion="26"
         android:targetSdkVersion="34" />
 
-    <attribution
-        android:label="@string/attribution_label"
-        android:tag="glip_recorder" />
-
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -24,6 +20,10 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <attribution
+        android:label="@string/attribution_label"
+        android:tag="glip_recorder" />
 
     <!-- Include required permissions for Google Mobile Ads to run -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -60,6 +60,7 @@
 
     <application
         android:allowBackup="true"
+        android:appCategory="game"
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
@@ -71,6 +72,9 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
+        <meta-data
+            android:name="com.samsung.android.game.gamehub"
+            android:value="true" />
 
         <activity
             android:name="com.glipverup.app.MainActivity"

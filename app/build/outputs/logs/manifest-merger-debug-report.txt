@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-48:12
-INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-48:12
-INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-48:12
-INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-48:12
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-53:12
+INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-53:12
+INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-53:12
+INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:1-53:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\71f36d8cc6e3d059010e2f8984c89484\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\1b3d81318cc0695b4aa206a12ebec079\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\9eca1de29ae658c2b83e0759f893d6b9\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
@@ -131,53 +131,53 @@ MERGED from [com.google.android.odml:image:1.0.0-beta1] C:\Users\yuko0\.gradle\c
 		INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml
 	xmlns:android
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:2:11-69
-attribution#glip_recorder
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:5-90
-	android:label
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:46-87
-	android:tag
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:18-45
 uses-permission#android.permission.FOREGROUND_SERVICE
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:5-77
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:5-77
 MERGED from [androidx.work:work-runtime:2.7.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\da704c17707721115b4786fc7e20cf33\transformed\work-runtime-2.7.0\AndroidManifest.xml:28:5-77
 MERGED from [androidx.work:work-runtime:2.7.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\da704c17707721115b4786fc7e20cf33\transformed\work-runtime-2.7.0\AndroidManifest.xml:28:5-77
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:22-74
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:5:22-74
 uses-permission#android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:5-94
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:6:5-94
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:22-91
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:6:22-91
 uses-permission#android.permission.FOREGROUND_SERVICE_MICROPHONE
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:5-88
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:5-88
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:22-85
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:7:22-85
 uses-permission#android.permission.SYSTEM_ALERT_WINDOW
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:5-78
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:5-78
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:22-75
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:8:22-75
 uses-permission#android.permission.POST_NOTIFICATIONS
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:5-77
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:5-77
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:22-74
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:9:22-74
 uses-permission#android.permission.RECORD_AUDIO
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:5-71
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:5-71
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:22-68
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:10:22-68
 uses-permission#android.permission.WRITE_EXTERNAL_STORAGE
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:5-108
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:5-108
 	android:maxSdkVersion
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:79-105
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:79-105
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:13:22-78
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:11:22-78
 uses-permission#android.permission.READ_EXTERNAL_STORAGE
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:5-107
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:5-107
 	android:maxSdkVersion
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:78-104
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:78-104
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:22-77
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:12:22-77
+attribution#glip_recorder
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:5-90
+	android:label
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:46-87
+	android:tag
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:14:18-45
 application
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:5-46:19
-INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:5-46:19
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:5-51:19
+INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:16:5-51:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\71f36d8cc6e3d059010e2f8984c89484\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\71f36d8cc6e3d059010e2f8984c89484\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\yuko0\.gradle\caches\9.4.1\transforms\9eca1de29ae658c2b83e0759f893d6b9\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -238,52 +238,60 @@ MERGED from [com.google.android.odml:image:1.0.0-beta1] C:\Users\yuko0\.gradle\c
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:20:9-35
 	android:label
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:19:9-41
+	android:appCategory
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:21:9-35
 	android:icon
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:18:9-58
 	android:allowBackup
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:17:9-35
 	android:theme
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:21:9-72
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:22:9-72
 meta-data#com.google.android.gms.ads.APPLICATION_ID
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:23:9-25:69
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:24:9-26:69
 	android:value
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:25:13-67
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:26:13-67
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:24:13-69
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:25:13-69
+meta-data#com.samsung.android.game.gamehub
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:28:9-30:36
+	android:value
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:30:13-33
+	android:name
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:29:13-60
 activity#com.glipverup.app.MainActivity
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:27:9-34:20
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:32:9-39:20
 	android:exported
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:29:13-36
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:34:13-36
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:28:13-41
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:33:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:30:13-33:29
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:35:13-38:29
 action#android.intent.action.MAIN
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:17-69
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:36:17-69
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:31:25-66
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:36:25-66
 category#android.intent.category.LAUNCHER
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:32:17-77
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:37:17-77
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:32:27-74
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:37:27-74
 service#com.glipverup.app.service.ScreenRecorderService
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:36:9-40:74
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:41:9-45:74
 	android:enabled
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:38:13-35
-	android:exported
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:39:13-37
-	android:foregroundServiceType
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:40:13-71
-	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:37:13-58
-activity#com.glipverup.app.service.TimeSelectionActivity
-ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:42:9-45:70
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:43:13-35
 	android:exported
 		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:44:13-37
-	android:theme
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:45:13-67
+	android:foregroundServiceType
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:45:13-71
 	android:name
-		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:43:13-58
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:42:13-58
+activity#com.glipverup.app.service.TimeSelectionActivity
+ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:47:9-50:70
+	android:exported
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:49:13-37
+	android:theme
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:50:13-67
+	android:name
+		ADDED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml:48:13-58
 uses-sdk
 INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from C:\Users\yuko0\StudioProjects\GlipVerUp\app\src\main\AndroidManifest.xml
