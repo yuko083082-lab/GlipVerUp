@@ -64,7 +64,12 @@ class MainActivity : ComponentActivity() {
             MobileAds.initialize(this) {}
         }
 
-        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        val attrContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            applicationContext.createAttributionContext("glip_recorder")
+        } else {
+            this
+        }
+        projectionManager = attrContext.getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"), Context.RECEIVER_NOT_EXPORTED)
         } else {
