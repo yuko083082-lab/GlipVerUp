@@ -1,0 +1,38 @@
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/deviceStreaming.xml
+
+# Gradle
+.gradle/
+build/
+app/build/
+gradlew
+gradlew.bat
+gradle/wrapper/gradle-wrapper.jar
+gradle/wrapper/gradle-wrapper.properties
+local.properties
+.gradle/md5-checksums.bin
+.gradle/sha1-checksums.bin
+
+# OS / Misc
+.DS_Store
+Thumbs.db
+*.log
+captures/
+
+# User specific files
+GameBooster.txt
+
+# External tool plugins
+.idea/amazonq.xml
