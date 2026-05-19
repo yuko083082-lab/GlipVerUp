@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">ZZZGlip</string>
-    <string name="attribution_label">Screen Recording</string>
-    <string name="rec_button">REC</string>
-    <string name="recording">Recording...</string>
-    <string name="stop_button">STOP</string>
-</resources>
