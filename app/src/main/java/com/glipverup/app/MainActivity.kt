@@ -28,6 +28,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            super.attachBaseContext(newBase.createAttributionContext("glip_recorder"))
+        } else {
+            super.attachBaseContext(newBase)
+        }
+    }
+
     private lateinit var projectionManager: MediaProjectionManager
     private var mainViewModel: MainViewModel? = null
 
@@ -64,12 +72,7 @@ class MainActivity : ComponentActivity() {
             MobileAds.initialize(this) {}
         }
 
-        val attrContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            applicationContext.createAttributionContext("glip_recorder")
-        } else {
-            this
-        }
-        projectionManager = attrContext.getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"), Context.RECEIVER_NOT_EXPORTED)
         } else {

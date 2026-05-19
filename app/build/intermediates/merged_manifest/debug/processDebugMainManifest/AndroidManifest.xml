@@ -60,7 +60,9 @@
 
     <application
         android:allowBackup="true"
+        android:appCategory="game"
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+        android:attributionTags="glip_recorder"
         android:debuggable="true"
         android:extractNativeLibs="false"
         android:icon="@android:drawable/sym_def_app_icon"
@@ -71,9 +73,13 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713" />
+        <meta-data
+            android:name="com.samsung.android.game.gamehub"
+            android:value="true" />
 
         <activity
             android:name="com.glipverup.app.MainActivity"
+            android:attributionTags="glip_recorder"
             android:exported="true" >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -84,6 +90,7 @@
 
         <service
             android:name="com.glipverup.app.service.ScreenRecorderService"
+            android:attributionTags="glip_recorder"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaProjection|microphone" />

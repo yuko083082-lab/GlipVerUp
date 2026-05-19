@@ -19,6 +19,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:appCategory="game"
+        android:attributionTags="glip_recorder"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <meta-data
@@ -31,7 +32,8 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:attributionTags="glip_recorder">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -42,6 +44,7 @@
             android:name=".service.ScreenRecorderService"
             android:enabled="true"
             android:exported="false"
+            android:attributionTags="glip_recorder"
             android:foregroundServiceType="mediaProjection|microphone" />
 
         <activity
