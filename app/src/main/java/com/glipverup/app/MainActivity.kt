@@ -33,34 +33,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    // ...
-    private fun showAppSelectionDialog(viewModel: MainViewModel) {
-        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        // Android 11+ の可視性制限に対応するためフラグを 0 に設定
-        // マニフェストに <queries> を追加したことで拾えるようになります
-        val pkgAppsList = packageManager.queryIntentActivities(mainIntent, android.content.pm.PackageManager.MATCH_ALL)
-            .filter { it.activityInfo.packageName != packageName }
-            .distinctBy { it.activityInfo.packageName } // 重複除去
-            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
 
-        val appNames = pkgAppsList.map { it.loadLabel(packageManager).toString() }.toTypedArray()
-        
-        if (appNames.isEmpty()) {
-            Toast.makeText(this, "No launchable apps found.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Select Game App")
-            .setItems(appNames) { _, which ->
-                val selectedApp = pkgAppsList[which]
-                val pkgName = selectedApp.activityInfo.packageName
-                val appName = selectedApp.loadLabel(packageManager).toString()
-                viewModel.updateTargetApp(pkgName, appName)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
     override fun attachBaseContext(newBase: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             super.attachBaseContext(newBase.createAttributionContext("glip_recorder"))
@@ -124,13 +97,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Initialize Mobile Ads SDK (Disabled in Debug)
         if (!BuildConfig.DEBUG) {
             MobileAds.initialize(this) {}
             loadAd()
         }
 
-        projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        val attributionContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            createAttributionContext("glip_recorder")
+        } else { this }
+
+        projectionManager = attributionContext.getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"), Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -155,7 +131,6 @@ class MainActivity : ComponentActivity() {
                             targetAppName = targetAppName,
                             onToggleRecording = {
                                 if (!viewModel.isRecording) {
-                                    // 直接システムダイアログへ。アプリ未選択でも制限しない
                                     startRecordingProcess()
                                 } else {
                                     stopRecording()
@@ -219,9 +194,7 @@ class MainActivity : ComponentActivity() {
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
             } else {
-                // 録画許可を求める前にターゲットアプリを起動（最近のアプリのトップに持ってくるため）
                 launchTargetApp()
-
                 val intent = if (Build.VERSION.SDK_INT >= 34) {
                     val config = android.media.projection.MediaProjectionConfig.createConfigForUserChoice()
                     projectionManager.createScreenCaptureIntent(config)
@@ -247,24 +220,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startRecorderService(resultCode: Int, data: Intent) {
-        // 毎回新しいIntentとして作成し、前回のデータを引き継がないようにする
-        val intent = Intent(this, ScreenRecorderService::class.java).apply {
+        val attributionContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            createAttributionContext("glip_recorder")
+        } else { this }
+
+        val intent = Intent(attributionContext, ScreenRecorderService::class.java).apply {
             action = "START_RECORDING"
             putExtra("resultCode", resultCode)
             putExtra("data", data)
-            // 以前のセッション情報をクリアするためにフラグを追加
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
+                attributionContext.startForegroundService(intent)
             } else {
-                startService(intent)
+                attributionContext.startService(intent)
             }
             mainViewModel?.updateRecordingState(true)
         } catch (e: Exception) {
             android.util.Log.e("ZZZGlip", "Failed to start service", e)
         }
+    }
+
+    private fun showAppSelectionDialog(viewModel: MainViewModel) {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        val pkgAppsList = packageManager.queryIntentActivities(mainIntent, android.content.pm.PackageManager.MATCH_ALL)
+            .filter { it.activityInfo.packageName != packageName }
+            .distinctBy { it.activityInfo.packageName }
+            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+
+        val appNames = pkgAppsList.map { it.loadLabel(packageManager).toString() }.toTypedArray()
+        
+        if (appNames.isEmpty()) {
+            Toast.makeText(this, "No launchable apps found.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Select Game App")
+            .setItems(appNames) { _, which ->
+                val selectedApp = pkgAppsList[which]
+                val pkgName = selectedApp.activityInfo.packageName
+                val appName = selectedApp.loadLabel(packageManager).toString()
+                viewModel.updateTargetApp(pkgName, appName)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun requestNotificationPermission() {

@@ -156,14 +156,7 @@ class ScreenRecorderService : Service() {
         serviceScope.launch(Dispatchers.Default) {
             while (isRecording.get() && currentCoroutineContext().isActive) {
                 val mp = mediaProjection ?: break
-                val success = prepareAndStartRecording(mp)
-                if (!success) {
-                    Log.e("ZZZGlip", "Fatal: Failed to prepare recording. Stopping.")
-                    // Android 14 復旧: ここで stopRecording を呼ぶと mediaProjection が null になり
-                    // 以降のループで SecurityException (non-current) を防げる
-                    stopRecording()
-                    break
-                }
+                prepareAndStartRecording(mp)
                 while (isRecording.get() && !pendingRotationRestart && currentCoroutineContext().isActive) { delay(500) }
                 stopEncoderOnly()
                 if (!isRecording.get() || !currentCoroutineContext().isActive) break
@@ -182,8 +175,8 @@ class ScreenRecorderService : Service() {
         } catch (e: Exception) { Log.e("ZZZGlip", "Audio fail", e) }
     }
 
-    private fun prepareAndStartRecording(mp: MediaProjection): Boolean {
-        if (!isRecording.get()) return false
+    private fun prepareAndStartRecording(mp: MediaProjection) {
+        if (!isRecording.get()) return
         try {
             val metrics = DisplayMetrics(); @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(metrics)
             val rotation = windowManager.defaultDisplay.rotation; val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
@@ -209,10 +202,8 @@ class ScreenRecorderService : Service() {
             }
             
             serviceScope.launch(Dispatchers.Default) { recordingLoop() }
-            return true
         } catch (e: Exception) { 
             Log.e("ZZZGlip", "Prepare fail", e) 
-            return false
         }
     }
 
@@ -454,11 +445,22 @@ class ScreenRecorderService : Service() {
                         try {
                             var frameDetected = false
                             for (block in visionText.textBlocks) {
+                                // 形状判定: アスペクト比が 2.5 〜 8.5 であること
+                                val rect = block.boundingBox ?: continue
+                                val aspect = rect.width().toFloat() / rect.height().toFloat()
+                                if (aspect !in 2.5f..8.5f) continue
+
                                 val text = block.text.uppercase().replace(Regex("[^A-Z]+"), "")
                                 if (text.length < 3) continue
-                                // 厳格な判定: OCRでWIPEOUTに近い文字が出ているか、またはWIPEOUTが含まれているか
-                                if (isFuzzyMatch(text, "WIPEOUT", if (text.length < 6) 1 else 2) || text.contains("WIPEOUT")) {
-                                    frameDetected = true; break
+                                
+                                val isFuzzy = isFuzzyMatch(text, "WIPEOUT", if (text.length < 6) 1 else 2)
+                                val wpuCount = text.count { it == 'W' || it == 'P' || it == 'U' }
+                                
+                                // 論理和による確定: ファジー一致 または (黄色密度OK かつ 特徴文字3つ以上)
+                                if (isFuzzy || (yellowDensity > 0.008f && wpuCount >= 3)) {
+                                    Log.d("ZZZGlip_Detection", "Match! Text: $text, Aspect: $aspect, Yellow: $yellowDensity, WPU: $wpuCount")
+                                    frameDetected = true
+                                    break
                                 }
                             }
                             
@@ -466,16 +468,17 @@ class ScreenRecorderService : Service() {
                             if (frameDetected) {
                                 if (now - lastMatchTimeMs > 2000) { matchCount = 1 } else { matchCount++ }
                                 lastMatchTimeMs = now
-                                Log.d("ZZZGlip_Detection", "Match in frame ($matchCount/3) Yellow: $yellowDensity")
+                                Log.d("ZZZGlip_Detection", "Match in frame ($matchCount/3)")
                                 if (matchCount >= 3) {
-                                    // 正常動作の復旧: 即座にロックをかけて、5秒待機中の重複検知を防ぐ
+                                    // 正常動作の完全復旧: 即座にアトミックロックをかけて連射を防止
                                     if (isSaving.compareAndSet(false, true)) {
-                                        Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED !!!")
+                                        Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED (Logic Confirmed) !!!")
                                         matchCount = 0
                                         handleWipeoutDetected()
                                     }
                                 }
                             } else if (now - lastMatchTimeMs > 1500) {
+                                if (matchCount > 0) Log.d("ZZZGlip_Detection", "Match timeout, resetting count")
                                 matchCount = 0
                             }
                         } finally { isProcessing.set(false) }
