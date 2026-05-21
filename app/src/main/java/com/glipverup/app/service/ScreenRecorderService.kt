@@ -22,9 +22,6 @@ import com.glipverup.app.R
 import com.glipverup.app.data.SettingsManager
 import com.glipverup.app.BuildConfig
 import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.interstitial.InterstitialAd
-import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -38,6 +35,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
 class ScreenRecorderService : Service() {
+
+    companion object {
+        private const val YELLOW_DENSITY_THRESHOLD = 0.015f
+    }
 
     override fun attachBaseContext(newBase: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -81,13 +82,9 @@ class ScreenRecorderService : Service() {
     private var isWipeoutDetectionEnabled = false
     private var targetAppPackage: String? = null
 
-    // WIPEOUT検知の強化用
-    private var wipeoutScore = 0
-    private var lastFragmentTime = 0L
+    // 状態管理
     private var lastFloatingX = 0
     private var lastFloatingY = 0
-
-    private var mInterstitialAd: InterstitialAd? = null
 
     private var videoEncoder: MediaCodec? = null
     private var audioEncoder: MediaCodec? = null
@@ -146,22 +143,6 @@ class ScreenRecorderService : Service() {
         serviceScope.launch {
             settingsManager.floatingYFlow.collectLatest { lastFloatingY = it ?: 0 }
         }
-
-        loadAd()
-    }
-
-    private fun loadAd() {
-        if (BuildConfig.DEBUG) return
-        val adRequest = AdRequest.Builder().build()
-        InterstitialAd.load(this, "ca-app-pub-3940256099942544/1033173712", adRequest,
-            object : InterstitialAdLoadCallback() {
-                override fun onAdLoaded(interstitialAd: InterstitialAd) {
-                    mInterstitialAd = interstitialAd
-                }
-                override fun onAdFailedToLoad(adError: LoadAdError) {
-                    mInterstitialAd = null
-                }
-            })
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -591,13 +572,13 @@ class ScreenRecorderService : Service() {
                     audioPCMBuffer.limit(read)
                     inputBuffer?.put(audioPCMBuffer)
 
-                    val nowUs = System.nanoTime() / 1000
                     if (audioTimelineOffsetUs == -1L) {
-                        audioTimelineOffsetUs = nowUs
+                        audioTimelineOffsetUs = System.nanoTime() / 1000
                         Log.d("ZZZGlip", "Audio timeline offset set: $audioTimelineOffsetUs")
                     }
 
-                    val ptsUs = nowUs - audioTimelineOffsetUs
+                    // サンプル数に基づいた精緻なPTS計算 (Drift排除)
+                    val ptsUs = audioSampleCount * 1_000_000L / 48000L
                     audioEncoder?.queueInputBuffer(inputIndex, 0, read, ptsUs, 0)
                     audioSampleCount += (read / 4)
                 }
@@ -1129,8 +1110,6 @@ class ScreenRecorderService : Service() {
                                     if (isFullMatch) {
                                         Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED !!!: $aggregatedText (Ratio: $aspectRatio, MaxH: $maxRowBlockHeight)")
                                         handleWipeoutDetected()
-                                        // saveDebugBitmap(bitmap.copy(bitmap.config, false), "MATCH_FULL")
-                                        wipeoutScore = 0
                                         return@addOnSuccessListener
                                     }
 
@@ -1160,13 +1139,6 @@ class ScreenRecorderService : Service() {
             reusableBitmap = null
             Log.d("ZZZGlip_Detection", "Pipeline resources released.")
         }
-    }
-
-    private fun isWipeoutFragment(text: String): Boolean {
-        if (text.length < 2 || text.length > 6) return false
-        // 誤読用キーワード(WAD, ADU等)を削除し、正規の断片のみに限定
-        val fragments = arrayOf("WI", "WIP", "WIF", "OUT", "EOU", "UT", "PEO")
-        return fragments.any { text.contains(it) }
     }
 
     private fun saveDebugBitmap(bitmap: Bitmap, suffix: String) {
@@ -1245,7 +1217,7 @@ class ScreenRecorderService : Service() {
             }
         }
         val density = yellowPixels.toFloat() / totalChecked
-        return density > 0.015
+        return density > YELLOW_DENSITY_THRESHOLD
     }
 
     private fun levenshteinDistance(s1: String, s2: String): Int {
