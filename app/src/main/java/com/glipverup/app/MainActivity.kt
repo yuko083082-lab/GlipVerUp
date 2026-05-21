@@ -1,6 +1,7 @@
 package com.glipverup.app
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.*
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
@@ -17,7 +18,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.glipverup.app.BuildConfig
 import com.glipverup.app.service.ScreenRecorderService
 import com.glipverup.app.ui.screens.MainScreen
@@ -28,6 +33,34 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    // ...
+    private fun showAppSelectionDialog(viewModel: MainViewModel) {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
+        // Android 11+ の可視性制限に対応するためフラグを 0 に設定
+        // マニフェストに <queries> を追加したことで拾えるようになります
+        val pkgAppsList = packageManager.queryIntentActivities(mainIntent, android.content.pm.PackageManager.MATCH_ALL)
+            .filter { it.activityInfo.packageName != packageName }
+            .distinctBy { it.activityInfo.packageName } // 重複除去
+            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+
+        val appNames = pkgAppsList.map { it.loadLabel(packageManager).toString() }.toTypedArray()
+        
+        if (appNames.isEmpty()) {
+            Toast.makeText(this, "No launchable apps found.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Select Game App")
+            .setItems(appNames) { _, which ->
+                val selectedApp = pkgAppsList[which]
+                val pkgName = selectedApp.activityInfo.packageName
+                val appName = selectedApp.loadLabel(packageManager).toString()
+                viewModel.updateTargetApp(pkgName, appName)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
     override fun attachBaseContext(newBase: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             super.attachBaseContext(newBase.createAttributionContext("glip_recorder"))
@@ -38,6 +71,30 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var projectionManager: MediaProjectionManager
     private var mainViewModel: MainViewModel? = null
+    private var mInterstitialAd: InterstitialAd? = null
+
+    private fun loadAd() {
+        if (BuildConfig.DEBUG) return
+        val adRequest = AdRequest.Builder().build()
+        InterstitialAd.load(this, "ca-app-pub-3940256099942544/1033173712", adRequest, object : InterstitialAdLoadCallback() {
+            override fun onAdLoaded(interstitialAd: InterstitialAd) {
+                mInterstitialAd = interstitialAd
+            }
+            override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                mInterstitialAd = null
+            }
+        })
+    }
+
+    private fun showAdIfAvailable() {
+        mInterstitialAd?.let {
+            it.show(this)
+            mInterstitialAd = null
+            loadAd()
+        } ?: run {
+            loadAd()
+        }
+    }
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -70,6 +127,7 @@ class MainActivity : ComponentActivity() {
         // Initialize Mobile Ads SDK (Disabled in Debug)
         if (!BuildConfig.DEBUG) {
             MobileAds.initialize(this) {}
+            loadAd()
         }
 
         projectionManager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -81,6 +139,7 @@ class MainActivity : ComponentActivity() {
         
         requestNotificationPermission()
         validateSettings()
+        checkServiceRunning()
 
         setContent {
             AppTheme {
@@ -90,10 +149,13 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
+                        val targetAppName by viewModel.targetAppName.collectAsState()
                         MainScreen(
                             isRecording = viewModel.isRecording,
+                            targetAppName = targetAppName,
                             onToggleRecording = {
                                 if (!viewModel.isRecording) {
+                                    // 直接システムダイアログへ。アプリ未選択でも制限しない
                                     startRecordingProcess()
                                 } else {
                                     stopRecording()
@@ -102,6 +164,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onNavigateToSettings = {
                                 navController.navigate("settings")
+                            },
+                            onSelectApp = {
+                                showAppSelectionDialog(viewModel)
                             }
                         )
                     }
@@ -116,12 +181,67 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkServiceRunning()
+        if (intent?.getBooleanExtra("SHOW_AD", false) == true) {
+            intent.removeExtra("SHOW_AD")
+            showAdIfAvailable()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.getBooleanExtra("SHOW_AD", false) == true) {
+            intent.removeExtra("SHOW_AD")
+            showAdIfAvailable()
+        }
+    }
+
+    private fun checkServiceRunning() {
+        val manager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        @Suppress("DEPRECATION")
+        val services = manager.getRunningServices(Int.MAX_VALUE)
+        if (services != null) {
+            for (service in services) {
+                if (ScreenRecorderService::class.java.name == service.service.className) {
+                    mainViewModel?.updateRecordingState(true)
+                    return
+                }
+            }
+        }
+        mainViewModel?.updateRecordingState(false)
+    }
+
     private fun startRecordingProcess() {
         if (checkOverlayPermission(request = true)) {
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
             } else {
-                screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+                // 録画許可を求める前にターゲットアプリを起動（最近のアプリのトップに持ってくるため）
+                launchTargetApp()
+
+                val intent = if (Build.VERSION.SDK_INT >= 34) {
+                    val config = android.media.projection.MediaProjectionConfig.createConfigForUserChoice()
+                    projectionManager.createScreenCaptureIntent(config)
+                } else {
+                    projectionManager.createScreenCaptureIntent()
+                }
+                screenCaptureLauncher.launch(intent)
+            }
+        }
+    }
+
+    private fun launchTargetApp() {
+        lifecycleScope.launch {
+            val settingsManager = com.glipverup.app.data.SettingsManager(this@MainActivity)
+            val pkg = settingsManager.targetAppPackageFlow.first()
+            if (pkg != null) {
+                val intent = packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) {
+                    startActivity(intent)
+                }
             }
         }
     }

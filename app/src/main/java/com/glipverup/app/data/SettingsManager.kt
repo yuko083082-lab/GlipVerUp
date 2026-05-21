@@ -20,6 +20,21 @@ class SettingsManager(private val context: Context) {
         val FLOATING_X_KEY = intPreferencesKey("floating_x")
         val FLOATING_Y_KEY = intPreferencesKey("floating_y")
         val WIPEOUT_DETECTION_KEY = booleanPreferencesKey("wipeout_detection")
+        val TARGET_APP_PACKAGE_KEY = stringPreferencesKey("target_app_package")
+        val TARGET_APP_NAME_KEY = stringPreferencesKey("target_app_name")
+    }
+
+    val targetAppPackageFlow: Flow<String?> = context.dataStore.data.map { it[TARGET_APP_PACKAGE_KEY] }
+    val targetAppNameFlow: Flow<String?> = context.dataStore.data.map { it[TARGET_APP_NAME_KEY] }
+
+    suspend fun updateTargetApp(packageName: String?, appName: String?) {
+        context.dataStore.edit { preferences ->
+            if (packageName != null) preferences[TARGET_APP_PACKAGE_KEY] = packageName
+            else preferences.remove(TARGET_APP_PACKAGE_KEY)
+            
+            if (appName != null) preferences[TARGET_APP_NAME_KEY] = appName
+            else preferences.remove(TARGET_APP_NAME_KEY)
+        }
     }
 
     val floatingXFlow: Flow<Int?> = context.dataStore.data.map { it[FLOATING_X_KEY] }

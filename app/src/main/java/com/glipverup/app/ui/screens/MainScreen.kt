@@ -17,11 +17,14 @@ import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
 import com.glipverup.app.BuildConfig
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     isRecording: Boolean,
+    targetAppName: String?,
     onToggleRecording: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onSelectApp: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -39,19 +42,47 @@ fun MainScreen(
             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
         }
 
-        Button(
-            onClick = onToggleRecording,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFE53935) // 赤色
-            ),
-            modifier = Modifier
-                .size(200.dp)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = if (isRecording) "STOP" else "REC",
-                fontSize = 32.sp,
-                color = Color.White
-            )
+            // Target App Display (Last Used App)
+            Card(
+                onClick = onSelectApp,
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .padding(bottom = 32.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Target Game:", color = Color.Gray, fontSize = 12.sp)
+                    Text(
+                        text = targetAppName ?: "Tap to Select App",
+                        color = Color.Cyan,
+                        fontSize = 20.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                    if (targetAppName != null) {
+                        Text("(Last Used)", color = Color.DarkGray, fontSize = 10.sp)
+                    }
+                }
+            }
+            
+            Button(
+                onClick = onToggleRecording,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isRecording) Color.Gray else Color(0xFFE53935)
+                ),
+                modifier = Modifier.size(180.dp)
+            ) {
+                Text(
+                    text = if (isRecording) "STOP" else "REC",
+                    fontSize = 32.sp,
+                    color = Color.White
+                )
+            }
         }
 
         // Ad Banner at the bottom
