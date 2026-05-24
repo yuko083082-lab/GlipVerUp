@@ -21,10 +21,8 @@ import com.glipverup.app.BuildConfig
 @Composable
 fun MainScreen(
     isRecording: Boolean,
-    targetAppName: String?,
     onToggleRecording: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onSelectApp: () -> Unit
+    onNavigateToSettings: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -45,31 +43,6 @@ fun MainScreen(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Target App Display (Last Used App)
-            Card(
-                onClick = onSelectApp,
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A)),
-                modifier = Modifier
-                    .fillMaxWidth(0.8f)
-                    .padding(bottom = 32.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Target Game:", color = Color.Gray, fontSize = 12.sp)
-                    Text(
-                        text = targetAppName ?: "Tap to Select App",
-                        color = Color.Cyan,
-                        fontSize = 20.sp,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                    )
-                    if (targetAppName != null) {
-                        Text("(Last Used)", color = Color.DarkGray, fontSize = 10.sp)
-                    }
-                }
-            }
-            
             Button(
                 onClick = onToggleRecording,
                 colors = ButtonDefaults.buttonColors(

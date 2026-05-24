@@ -125,10 +125,8 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(navController = navController, startDestination = "main") {
                     composable("main") {
-                        val targetAppName by viewModel.targetAppName.collectAsState()
                         MainScreen(
                             isRecording = viewModel.isRecording,
-                            targetAppName = targetAppName,
                             onToggleRecording = {
                                 if (!viewModel.isRecording) {
                                     startRecordingProcess()
@@ -139,9 +137,6 @@ class MainActivity : ComponentActivity() {
                             },
                             onNavigateToSettings = {
                                 navController.navigate("settings")
-                            },
-                            onSelectApp = {
-                                showAppSelectionDialog(viewModel)
                             }
                         )
                     }
@@ -194,7 +189,6 @@ class MainActivity : ComponentActivity() {
             if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
             } else {
-                launchTargetApp()
                 val intent = if (Build.VERSION.SDK_INT >= 34) {
                     val config = android.media.projection.MediaProjectionConfig.createConfigForUserChoice()
                     projectionManager.createScreenCaptureIntent(config)
@@ -202,19 +196,6 @@ class MainActivity : ComponentActivity() {
                     projectionManager.createScreenCaptureIntent()
                 }
                 screenCaptureLauncher.launch(intent)
-            }
-        }
-    }
-
-    private fun launchTargetApp() {
-        lifecycleScope.launch {
-            val settingsManager = com.glipverup.app.data.SettingsManager(this@MainActivity)
-            val pkg = settingsManager.targetAppPackageFlow.first()
-            if (pkg != null) {
-                val intent = packageManager.getLaunchIntentForPackage(pkg)
-                if (intent != null) {
-                    startActivity(intent)
-                }
             }
         }
     }
@@ -240,32 +221,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e("ZZZGlip", "Failed to start service", e)
         }
-    }
-
-    private fun showAppSelectionDialog(viewModel: MainViewModel) {
-        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply { addCategory(Intent.CATEGORY_LAUNCHER) }
-        val pkgAppsList = packageManager.queryIntentActivities(mainIntent, android.content.pm.PackageManager.MATCH_ALL)
-            .filter { it.activityInfo.packageName != packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-
-        val appNames = pkgAppsList.map { it.loadLabel(packageManager).toString() }.toTypedArray()
-        
-        if (appNames.isEmpty()) {
-            Toast.makeText(this, "No launchable apps found.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Select Game App")
-            .setItems(appNames) { _, which ->
-                val selectedApp = pkgAppsList[which]
-                val pkgName = selectedApp.activityInfo.packageName
-                val appName = selectedApp.loadLabel(packageManager).toString()
-                viewModel.updateTargetApp(pkgName, appName)
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
     }
 
     private fun requestNotificationPermission() {

@@ -36,18 +36,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isWipeoutEnabled: StateFlow<Boolean> = settingsManager.wipeoutDetectionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    val targetAppPackage: StateFlow<String?> = settingsManager.targetAppPackageFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    val targetAppName: StateFlow<String?> = settingsManager.targetAppNameFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun updateTargetApp(packageName: String?, appName: String?) {
-        viewModelScope.launch {
-            settingsManager.updateTargetApp(packageName, appName)
-        }
-    }
-
     fun updateRecordingState(recording: Boolean) {
         isRecording = recording
     }
