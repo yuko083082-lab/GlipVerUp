@@ -97,7 +97,7 @@ class ScreenRecorderService : Service() {
     private var persistedVideoFormat: MediaFormat? = null
     private var persistedAudioFormat: MediaFormat? = null
 
-    private data class OcrFragment(val char: Char, val rawChar: Char, val centerX: Int, val width: Int, val timestamp: Long)
+    private data class OcrFragment(val char: Char, val rawChar: Char, val centerX: Int, val width: Int, val height: Int, val timestamp: Long)
     private val ocrBuffer = java.util.concurrent.CopyOnWriteArrayList<OcrFragment>()
 
     private var audioSampleCount = 0L
@@ -832,27 +832,34 @@ class ScreenRecorderService : Service() {
 
     private fun setupWipeoutDetection() { }
 
-    private fun checkShapeFast(bitmap: Bitmap): Boolean {
+    private fun checkContrastFast(bitmap: Bitmap): Boolean {
         val w = bitmap.width; val h = bitmap.height
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
         
-        var yellowCount = 0
+        var edgeCount = 0
         val startY = (h * 0.3).toInt()
         val endY = (h * 0.7).toInt()
         
+        // 隣接ピクセルとの輝度差（コントラスト）を計算
         for (y in startY until endY) {
-            for (x in 0 until w) {
-                val p = pixels[y * w + x]
-                val r = (p shr 16) and 0xff; val g = (p shr 8) and 0xff; val b = p and 0xff
-                val yellowVal = ((r + g) / 2.0 - b).toInt()
-                if (yellowVal > 40) yellowCount++
+            for (x in 1 until w) {
+                val p1 = pixels[y * w + x]
+                val p2 = pixels[y * w + x - 1]
+                
+                // 簡易的な輝度計算 (L = 0.299R + 0.587G + 0.114B)
+                val l1 = (((p1 shr 16) and 0xff) * 0.299 + ((p1 shr 8) and 0xff) * 0.587 + (p1 and 0xff) * 0.114).toInt()
+                val l2 = (((p2 shr 16) and 0xff) * 0.299 + ((p2 shr 8) and 0xff) * 0.587 + (p2 and 0xff) * 0.114).toInt()
+                
+                // 輝度差が一定（30）以上ならエッジとみなす
+                if (abs(l1 - l2) > 30) edgeCount++
             }
         }
         
         val area = w * (endY - startY)
-        // 閾値を緩和（以前の75%相当として、1.5%密度を基準に設定）
-        return yellowCount > (area * 0.015)
+        // 本物のWIPEOUT画像のエッジ強度を100%としたとき、その30%程度を閾値とする。
+        // 本物のエッジ密度を約12%と想定し、その30%である約4%を閾値に設定。
+        return edgeCount > (area * 0.04)
     }
 
     private suspend fun startDetectionLoop() {
@@ -912,7 +919,7 @@ class ScreenRecorderService : Service() {
 
                     // 1. 形状判定（トリガー）: OCR停止中、または終了直前(100ms以内)のみ実行
                     if (!isOcrCurrentlyActive || remainingOcrTime <= 100) {
-                        if (checkShapeFast(bitmap)) {
+                        if (checkContrastFast(bitmap)) {
                             ocrActiveUntil = now + 2000
                         }
                     }
@@ -975,17 +982,18 @@ class ScreenRecorderService : Service() {
                                             
                                             val centerX = rect.centerX()
                                             val width = rect.width()
+                                            val height = rect.height()
                                             val centerY = rect.centerY()
                                             val normCenterY = centerY.toFloat() / ocrH
                                             
                                             if (com.glipverup.app.BuildConfig.DEBUG) {
-                                                rawLog.append("[$char at $centerX,$centerY w$width] ")
+                                                rawLog.append("[$char at $centerX,$centerY w$width h$height] ")
                                             }
 
                                             if (normCenterY in 0.3..0.7) {
-                                                val normalizedChar = isSpatialMatch(char, centerX, width)
+                                                val normalizedChar = isSpatialMatch(char, centerX, width, height)
                                                 if (normalizedChar != null) {
-                                                    currentFrameFragments.add(OcrFragment(normalizedChar, char, centerX, width, now))
+                                                    currentFrameFragments.add(OcrFragment(normalizedChar, char, centerX, width, height, now))
                                                 }
                                             }
                                         }
@@ -1052,7 +1060,7 @@ class ScreenRecorderService : Service() {
         return false
     }
 
-    private fun isSpatialMatch(char: Char, x: Int, width: Int): Char? {
+    private fun isSpatialMatch(char: Char, x: Int, width: Int, height: Int): Char? {
         // 200px幅における定義: (中心X基準, 理想幅基準, 許容文字セット)
         val slots = listOf(
             Triple(29.0, 40.0, setOf('W', 'V', 'M')),           // Slot 0: W (40%)
@@ -1064,6 +1072,10 @@ class ScreenRecorderService : Service() {
             Triple(187.5, 17.0, setOf('T', 'I', 'L'))           // Slot 6: T (50%)
         )
         val expectedChars = "WIPEOUT"
+
+        // 理想的な縦幅（基準）: 37.0 px (200px幅画像における実測値)
+        // 下限閾値: 基準の75% (27.75 px -> 27px) 未満なら却下
+        if (height < 27) return null
         
         for (i in slots.indices) {
             val (targetX, idealW, allowedSet) = slots[i]
