@@ -1212,22 +1212,7 @@ class ScreenRecorderService : Service() {
         }
     }
 
-    private fun cleanUpOcrBitmap(bitmap: Bitmap) {
-        val w = bitmap.width; val h = bitmap.height
-        val pix = IntArray(w * h); bitmap.getPixels(pix, 0, w, 0, 0, w, h)
-        val out = pix.copyOf(); val black = android.graphics.Color.BLACK; val white = android.graphics.Color.WHITE
-        for (y in 1 until h - 1) {
-            for (x in 1 until w - 1) {
-                if (pix[y * w + x] == black) {
-                    var n = 0; for (dy in -1..1) { for (dx in -1..1) { if ((dx != 0 || dy != 0) && pix[(y + dy) * w + (x + dx)] == black) n++ } }
-                    if (n <= 1) out[y * w + x] = white
-                }
-            }
-        }
-        val dilated = out.copyOf()
-        for (y in 1 until h - 1) { for (x in 1 until w - 1) { if (out[y * w + x] == black) { for (dy in -1..1) { for (dx in -1..1) dilated[(y + dy) * w + (x + dx)] = black } } } }
-        bitmap.setPixels(dilated, 0, w, 0, 0, w, h)
-    }
+
 
     private fun stopEncoderOnly() {
 virtualDisplay?.surface = null; try { videoEncoder?.stop() } catch (e: Exception) {} finally { videoEncoder?.release(); videoEncoder = null }; try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }; videoEncoderSurface?.release(); videoEncoderSurface = null }
