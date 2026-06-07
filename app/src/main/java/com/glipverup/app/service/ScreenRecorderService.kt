@@ -3,6 +3,8 @@ package com.glipverup.app.service
 import android.app.*
 import android.content.*
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
@@ -20,9 +22,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.glipverup.app.R
 import com.glipverup.app.data.SettingsManager
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.glipverup.app.util.WipeoutDetector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -83,6 +83,10 @@ class ScreenRecorderService : Service() {
     private var audioRecord: AudioRecord? = null
     private var audioJob: Job? = null
     private var detectionJob: Job? = null
+    
+    private var reusableDetectionBitmap: Bitmap? = null
+    private var reusableFullFrameBitmap: Bitmap? = null
+    private val isDetectionProcessing = AtomicBoolean(false)
 
     private var muxer: MediaMuxer? = null
     private val muxerLock = Any()
@@ -97,17 +101,7 @@ class ScreenRecorderService : Service() {
     private var persistedVideoFormat: MediaFormat? = null
     private var persistedAudioFormat: MediaFormat? = null
 
-    private data class OcrFragment(val char: Char, val rawChar: Char, val centerX: Int, val width: Int, val height: Int, val timestamp: Long)
-    private val ocrBuffer = java.util.concurrent.CopyOnWriteArrayList<OcrFragment>()
-
     private var audioSampleCount = 0L
-
-    // Atlas Debug Image Buffer (Ver 6.0)
-    private val atlasFrames = mutableListOf<Bitmap>()
-    private val atlasLock = Any()
-
-    private var reusablePixels: IntArray? = null
-    private var reusableOutPixels: IntArray? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -218,6 +212,15 @@ class ScreenRecorderService : Service() {
                 isRecording.set(true)
                 initializeAudioRecord(projection)
                 showFloatingButton()
+                
+                // 💡 録画開始時に一度だけ検知ループを開始 (SecurityException対策)
+                if (isWipeoutDetectionEnabled && (detectionJob == null || detectionJob?.isActive == false)) {
+                    detectionJob = serviceScope.launch(Dispatchers.Default) {
+                        delay(1000)
+                        startDetectionLoop()
+                    }
+                }
+                
                 startRecordingMainLoop()
             } catch (e: Exception) {
                 stopSelf()
@@ -383,19 +386,8 @@ class ScreenRecorderService : Service() {
             virtualDisplay?.surface = videoEncoderSurface
         }
 
-        if (isWipeoutDetectionEnabled) {
-            setupWipeoutDetection()
-        }
-
         rotateMuxer()
         lastMuxerRotationTimeMs = System.currentTimeMillis()
-
-        if (isWipeoutDetectionEnabled && (detectionJob == null || detectionJob?.isActive == false)) {
-            detectionJob = serviceScope.launch(Dispatchers.Default) {
-                delay(1000)
-                startDetectionLoop()
-            }
-        }
 
         recordingLoop()
     }
@@ -525,7 +517,6 @@ class ScreenRecorderService : Service() {
             videoEncoder?.let { encoder ->
                 val outIdx = try { encoder.dequeueOutputBuffer(vBufferInfo, 1000) } catch (_: Exception) { -1 }
                 if (outIdx >= 0) {
-                    // videoCaptured = true // ログ削減のため停止
                     val buffer = encoder.getOutputBuffer(outIdx)
                     if (buffer != null) {
                         val nowUs = System.nanoTime() / 1000
@@ -573,7 +564,6 @@ class ScreenRecorderService : Service() {
             audioEncoder?.let { encoder ->
                 val outIdx = try { encoder.dequeueOutputBuffer(aBufferInfo, 1000) } catch (_: Exception) { -1 }
                 if (outIdx >= 0) {
-                    // audioCaptured = true // ログ削減のため停止
                     val buffer = encoder.getOutputBuffer(outIdx)
                     if (buffer != null) {
                         val absoluteAudioPts = aBufferInfo.presentationTimeUs + audioTimelineOffsetUs
@@ -830,80 +820,27 @@ class ScreenRecorderService : Service() {
         }
     }
 
-    private fun setupWipeoutDetection() { }
-
-    private fun checkContrastFast(bitmap: Bitmap): Boolean {
-        val w = bitmap.width; val h = bitmap.height
-        val pixels = IntArray(w * h)
-        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        
-        var edgeCount = 0
-        val startY = (h * 0.3).toInt()
-        val endY = (h * 0.7).toInt()
-        
-        // 隣接ピクセルとの輝度差（コントラスト）を計算
-        for (y in startY until endY) {
-            for (x in 1 until w) {
-                val p1 = pixels[y * w + x]
-                val p2 = pixels[y * w + x - 1]
-                
-                // 簡易的な輝度計算 (L = 0.299R + 0.587G + 0.114B)
-                val l1 = (((p1 shr 16) and 0xff) * 0.299 + ((p1 shr 8) and 0xff) * 0.587 + (p1 and 0xff) * 0.114).toInt()
-                val l2 = (((p2 shr 16) and 0xff) * 0.299 + ((p2 shr 8) and 0xff) * 0.587 + (p2 and 0xff) * 0.114).toInt()
-                
-                // 輝度差が一定（30）以上ならエッジとみなす
-                if (abs(l1 - l2) > 30) edgeCount++
-            }
-        }
-        
-        val area = w * (endY - startY)
-        // 本物のWIPEOUT画像のエッジ強度を100%としたとき、その30%程度を閾値とする。
-        // 本物のエッジ密度を約12%と想定し、その30%である約4%を閾値に設定。
-        return edgeCount > (area * 0.04)
-    }
-
     private suspend fun startDetectionLoop() {
-        val recognizerRaw = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val recognizerColor = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val backgroundExecutor = Dispatchers.Default.asExecutor()
+        while (isRecording.get() && isWipeoutDetectionEnabled) {
+            delay(100)
+            if (isSaving.get() || rotateMuxerNextLoop || isDetectionProcessing.get()) continue
 
-        val localHandlerThread = HandlerThread("ZZZGlip-Detection").apply { start() }
-        val currentBgHandler = Handler(localHandlerThread.looper)
+            val vd = virtualDisplay ?: continue
+            val surface = vd.surface ?: continue
+            if (!surface.isValid) continue
 
-        val isProcessing = AtomicBoolean(false)
-        var reusableBitmap: Bitmap? = null
-        var ocrReusableBitmap: Bitmap? = null
-        var processedReusableBitmap: Bitmap? = null
-        var channelIndex = 0
-        
-        var ocrActiveUntil = 0L
-        var heartbeatCount = 0
-
-        try {
-            while (isRecording.get() && isWipeoutDetectionEnabled) {
-                delay(100)
-                if (isProcessing.get()) continue
-                
-                // 録画の重要局面（保存・セグメント回転）では負荷を逃がす
-                if (isSaving.get() || rotateMuxerNextLoop) continue
-
-                val vd = virtualDisplay ?: continue
-                val targetW = 320
-                val targetH = (targetW * (captureHeight.toFloat() / captureWidth.toFloat())).toInt()
-
-                val bitmap = if (reusableBitmap != null && reusableBitmap!!.width == targetW && reusableBitmap!!.height == targetH) {
-                    reusableBitmap!!
-                } else {
-                    reusableBitmap?.recycle()
-                    Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888).also { reusableBitmap = it }
+            try {
+                if (reusableFullFrameBitmap == null || reusableFullFrameBitmap!!.width != captureWidth || reusableFullFrameBitmap!!.height != captureHeight) {
+                    reusableFullFrameBitmap?.recycle()
+                    reusableFullFrameBitmap = Bitmap.createBitmap(captureWidth, captureHeight, Bitmap.Config.ARGB_8888)
                 }
+                val fullBitmap = reusableFullFrameBitmap!!
 
                 val completable = CompletableDeferred<Int>()
-                currentBgHandler.post {
+                handler.post {
                     try {
-                        val surface = vd.surface
-                        if (surface != null && surface.isValid) {
-                            PixelCopy.request(surface, bitmap, { result -> completable.complete(result) }, currentBgHandler)
+                        if (surface.isValid) {
+                            PixelCopy.request(surface, null, fullBitmap, { result -> completable.complete(result) }, handler)
                         } else {
                             completable.complete(PixelCopy.ERROR_UNKNOWN)
                         }
@@ -913,288 +850,52 @@ class ScreenRecorderService : Service() {
                 }
 
                 if (try { completable.await() } catch (e: Exception) { -1 } == PixelCopy.SUCCESS) {
-                    val now = System.currentTimeMillis()
-                    val isOcrCurrentlyActive = now < ocrActiveUntil
-                    val remainingOcrTime = ocrActiveUntil - now
-
-                    // 1. 形状判定（トリガー）: OCR停止中、または終了直前(100ms以内)のみ実行
-                    if (!isOcrCurrentlyActive || remainingOcrTime <= 100) {
-                        if (checkContrastFast(bitmap)) {
-                            ocrActiveUntil = now + 2000
-                        }
-                    }
-
-                    // OCR期間外なら処理をスキップし、バッファをクリア
-                    if (now >= ocrActiveUntil) {
-                        if (ocrBuffer.isNotEmpty()) ocrBuffer.clear()
-                        continue
-                    }
-
-                    isProcessing.set(true)
-
-                    // 2. OCR用に解像度を200pxに落とす
-                    val ocrW = 200
-                    val ocrH = (ocrW * (targetH.toFloat() / targetW.toFloat())).toInt()
+                    isDetectionProcessing.set(true)
                     
-                    val ocrBaseBitmap = if (ocrReusableBitmap != null && ocrReusableBitmap!!.width == ocrW && ocrReusableBitmap!!.height == ocrH) {
-                        val canvas = android.graphics.Canvas(ocrReusableBitmap!!)
-                        val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-                        canvas.drawBitmap(bitmap, null, android.graphics.Rect(0, 0, ocrW, ocrH), paint)
-                        ocrReusableBitmap!!
-                    } else {
-                        ocrReusableBitmap?.recycle()
-                        Bitmap.createScaledBitmap(bitmap, ocrW, ocrH, true).also { ocrReusableBitmap = it }
-                    }
+                    serviceScope.launch(Dispatchers.Default) {
+                        var roiSnapshot: Bitmap? = null
+                        try {
+                            val left = (captureWidth * WipeoutDetector.ROI_LEFT_PCT).toInt()
+                            val top = (captureHeight * WipeoutDetector.ROI_TOP_PCT).toInt()
+                            val right = (captureWidth * WipeoutDetector.ROI_RIGHT_PCT).toInt()
+                            val bottom = (captureHeight * WipeoutDetector.ROI_BOTTOM_PCT).toInt()
+                            
+                            val targetW = (right - left).coerceAtLeast(1)
+                            val targetH = (bottom - top).coerceAtLeast(1)
 
-                    val mode = if (channelIndex % 2 == 0) "RAW" else "COLOR"
-                    val currentRecognizer = if (mode == "RAW") recognizerRaw else recognizerColor
-                    channelIndex++
-
-                    val chBitmap = if (processedReusableBitmap != null && processedReusableBitmap!!.width == ocrW && processedReusableBitmap!!.height == ocrH) {
-                        processedReusableBitmap!!
-                    } else {
-                        processedReusableBitmap?.recycle()
-                        Bitmap.createBitmap(ocrW, ocrH, Bitmap.Config.ARGB_8888).also { processedReusableBitmap = it }
-                    }
-
-                    preprocessForChannel(ocrBaseBitmap, chBitmap, mode)
-
-                    if (com.glipverup.app.BuildConfig.DEBUG) {
-                        addToAtlasBuffer(chBitmap)
-                    }
-
-                    currentRecognizer.process(InputImage.fromBitmap(chBitmap, 0))
-                        .addOnSuccessListener(backgroundExecutor) { visionText ->
-                            val currentFrameFragments = mutableListOf<OcrFragment>()
-                            val rawLog = StringBuilder()
-
-                            for (block in visionText.textBlocks) {
-                                // 効率化: ブロック単位で中央付近にあるか判定
-                                val blockRect = block.boundingBox ?: continue
-                                val blockCenterY = blockRect.centerY().toFloat() / ocrH
-                                if (blockCenterY !in 0.2..0.8) continue
-
-                                for (line in block.lines) {
-                                    for (element in line.elements) {
-                                        for (symbol in element.symbols) {
-                                            val char = symbol.text.uppercase().firstOrNull() ?: continue
-                                            val rect = symbol.boundingBox ?: continue
-                                            
-                                            val centerX = rect.centerX()
-                                            val width = rect.width()
-                                            val height = rect.height()
-                                            val centerY = rect.centerY()
-                                            val normCenterY = centerY.toFloat() / ocrH
-                                            
-                                            if (com.glipverup.app.BuildConfig.DEBUG) {
-                                                rawLog.append("[$char at $centerX,$centerY w$width h$height] ")
-                                            }
-
-                                            if (normCenterY in 0.3..0.7) {
-                                                val normalizedChar = isSpatialMatch(char, centerX, width, height)
-                                                if (normalizedChar != null) {
-                                                    currentFrameFragments.add(OcrFragment(normalizedChar, char, centerX, width, height, now))
-                                                }
-                                            }
-                                        }
-                                    }
+                            roiSnapshot = Bitmap.createBitmap(fullBitmap, left, top, targetW, targetH)
+                            val result = WipeoutDetector.detectWipeout(roiSnapshot)
+                            
+                            if (result.isDetected) {
+                                val detail = result.matchedChars.zip(result.scores).joinToString(", ") { "${it.first}: ${String.format(java.util.Locale.US, "%.2f", it.second)}" }
+                                android.util.Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED !!! Details: [$detail]")
+                                
+                                handleWipeoutDetected()
+                                saveEnhancedDiagnosticImage(roiSnapshot, result, "hit")
+                            } else {
+                                val countOver75 = result.scores.count { it >= 0.75f }
+                                val countOver70 = result.scores.count { it >= 0.70f }
+                                if (countOver75 >= 1 || countOver70 >= 2) {
+                                    saveEnhancedDiagnosticImage(roiSnapshot, result, "near")
                                 }
                             }
-
-                            if (com.glipverup.app.BuildConfig.DEBUG && rawLog.isNotEmpty()) {
-                                Log.d("ZZZGlip_RawOCR", "Raw [$mode]: $rawLog")
-                            }
-
-                            if (currentFrameFragments.isNotEmpty()) {
-                                ocrBuffer.addAll(currentFrameFragments)
-                            }
-                            
-                            ocrBuffer.removeIf { it.timestamp < now - 2000 }
-                            
-                            // ログ削減: Heartbeatを30回に1回に制限
-                            heartbeatCount++
-                            if (heartbeatCount >= 30) {
-                                val uniqueChars = ocrBuffer.map { it.char }.distinct()
-                                Log.d("ZZZGlip_OCR", "HB [$mode]: count=${uniqueChars.size}, chars='${uniqueChars.joinToString("")}', bufSize=${ocrBuffer.size}")
-                                heartbeatCount = 0
-                            }
-
-                            if (checkSpatioTemporalMatch(mode)) {
-                                Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED ($mode) !!!")
-                                handleWipeoutDetected()
-                            }
-                            isProcessing.set(false)
+                        } catch (e: Exception) {
+                            Log.e("ZZZGlip_Detection", "Analysis error", e)
+                        } finally {
+                            roiSnapshot?.recycle()
+                            isDetectionProcessing.set(false)
                         }
-                        .addOnFailureListener {
-                            isProcessing.set(false)
-                        }
+                    }
                 }
-            }
-        } finally {
-            recognizerRaw.close()
-            recognizerColor.close()
-            localHandlerThread.quitSafely()
-            reusableBitmap?.recycle()
-            ocrReusableBitmap?.recycle()
-            processedReusableBitmap?.recycle()
-        }
-    }
-
-    private fun checkSpatioTemporalMatch(mode: String): Boolean {
-        // バッファ内に存在する「合格済み」のユニークな文字種をカウント
-        val uniqueChars = ocrBuffer.map { it.char }.distinct()
-        val count = uniqueChars.size
-
-        // 英字の裏付けチェック: 少なくとも1つは生文字が英字であること
-        val hasAlphabetEvidence = ocrBuffer.any { it.rawChar in 'A'..'Z' }
-
-        // 判定の進捗を可視化
-        val bufStr = if (uniqueChars.isEmpty()) "(empty)" else uniqueChars.joinToString("")
-        Log.d("ZZZGlip_OCR", "HB [$mode]: count=$count, chars='$bufStr', alphabet=$hasAlphabetEvidence, bufSize=${ocrBuffer.size}")
-        
-        if (count >= 2 && hasAlphabetEvidence) {
-            val foundStr = uniqueChars.sortedBy { "WIPEOUT".indexOf(it) }.joinToString("")
-            Log.d("ZZZGlip_Fusion", "Success: DistinctCount=$count, Chars='$foundStr', Evidence=$hasAlphabetEvidence")
-            return true
-        }
-        return false
-    }
-
-    private fun isSpatialMatch(char: Char, x: Int, width: Int, height: Int): Char? {
-        // 200px幅における定義: (中心X基準, 理想幅基準, 許容文字セット)
-        val slots = listOf(
-            Triple(29.0, 40.0, setOf('W', 'V', 'M')),           // Slot 0: W (40%)
-            Triple(59.5, 17.0, setOf('I', '1', '|', 'L')),      // Slot 1: I (50%)
-            Triple(86.0, 19.5, setOf('P', 'F', 'B', 'I')),      // Slot 2: P (40%)
-            Triple(110.0, 20.5, setOf('E', 'L', 'F')),          // Slot 3: E (40%)
-            Triple(140.0, 22.5, setOf('O', '0', 'Q', 'D', 'C')),// Slot 4: O (40%)
-            Triple(170.0, 18.5, setOf('U', 'V', 'L', 'J')),     // Slot 5: U (40%)
-            Triple(187.5, 17.0, setOf('T', 'I', 'L'))           // Slot 6: T (50%)
-        )
-        val expectedChars = "WIPEOUT"
-
-        // 理想的な縦幅（基準）: 37.0 px (200px幅画像における実測値)
-        // 下限閾値: 基準の75% (27.75 px -> 27px) 未満なら却下
-        if (height < 27) return null
-        
-        for (i in slots.indices) {
-            val (targetX, idealW, allowedSet) = slots[i]
-            
-            // ① 幅の下限チェック (I, Tは50%、他は40%)
-            val threshold = if (i == 1 || i == 6) 0.5 else 0.4
-            if (width < (idealW * threshold).toInt()) continue
-
-            // ② 位置チェック: ±20px (実測ベースに寄せたため範囲を絞る)
-            if (abs(x - targetX.toInt()) > 20) continue
-
-            // ③ 文字種チェック
-            if (char in allowedSet) {
-                return expectedChars[i]
-            }
-        }
-        return null
-    }
-
-    private fun preprocessForChannel(source: Bitmap, out: Bitmap, mode: String) {
-        val w = source.width; val h = source.height
-        val size = w * h
-        if (reusablePixels == null || reusablePixels!!.size != size) {
-            reusablePixels = IntArray(size)
-            reusableOutPixels = IntArray(size)
-        }
-        val pixels = reusablePixels!!
-        val outPixels = reusableOutPixels!!
-        
-        source.getPixels(pixels, 0, w, 0, 0, w, h)
-        
-        if (mode == "RAW") {
-            // RAWモード: そのままコピー (UIマスクのみ適用)
-            System.arraycopy(pixels, 0, outPixels, 0, pixels.size)
-        } else {
-            for (i in pixels.indices) {
-                val p = pixels[i]
-                val r = (p shr 16) and 0xff; val g = (p shr 8) and 0xff; val b = p and 0xff
-                
-                // 黄色抽出ベースのグレースケール変換 (Ver 6.2.7)
-                // 二値化(Black/White)や過度な黒色化はML Kitの認識精度を下げるため、
-                // 黄色の要素が強いほど濃いグレー(最低60)になるように変換し、トポロジー（文字の穴など）を維持する。
-                
-                // 黄色度合い(Yellow Intensity): RとGの平均からBを引いたもの。
-                val yellowVal = ((r + g) / 2.0 - b).toInt().coerceIn(0, 255)
-                
-                // 閾値以上の黄色を抽出。
-                // 輝度を下げすぎないことで、文字内の余白や背景との境界線を維持する。
-                val gray = if (yellowVal > 40) {
-                    (255 - (yellowVal * 0.8).toInt()).coerceIn(60, 255)
-                } else {
-                    255
-                }
-                outPixels[i] = (0xff shl 24) or (gray shl 16) or (gray shl 8) or gray
-            }
-        }
-
-        // 上下25%を白マスク（文字検知対象外エリア）
-        val maskH = (h * 0.25).toInt()
-        for (y in 0 until h) {
-            if (y < maskH || y > h - maskH) {
-                for (x in 0 until w) outPixels[y * w + x] = android.graphics.Color.WHITE
-            }
-        }
-        out.setPixels(outPixels, 0, w, 0, 0, w, h)
-    }
-
-    private fun addToAtlasBuffer(bitmap: Bitmap) {
-        synchronized(atlasLock) {
-            atlasFrames.add(Bitmap.createBitmap(bitmap))
-            if (atlasFrames.size >= 10) {
-                val framesToSave = atlasFrames.toList()
-                atlasFrames.clear()
-                serviceScope.launch(Dispatchers.IO) {
-                    saveDiagAtlas(framesToSave)
-                }
-            }
-        }
-    }
-
-    private fun saveDiagAtlas(frames: List<Bitmap>) {
-        if (frames.isEmpty()) return
-        val fw = frames[0].width
-        val fh = frames[0].height
-        
-        // 2列 x 5行のAtlas画像を作成 (10枚用)
-        val atlasW = fw * 2
-        val atlasH = fh * 5
-        val atlasBitmap = Bitmap.createBitmap(atlasW, atlasH, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(atlasBitmap)
-        
-        for (i in frames.indices) {
-            val col = i % 2
-            val row = i / 2
-            canvas.drawBitmap(frames[i], col.toFloat() * fw, row.toFloat() * fh, null)
-            frames[i].recycle()
-        }
-        
-        val now = System.currentTimeMillis()
-        serviceScope.launch(Dispatchers.IO) {
-            try {
-                val timeStr = java.text.SimpleDateFormat("HHmmss_SSS", java.util.Locale.getDefault()).format(java.util.Date(now))
-                val fileName = "atlas_$timeStr.jpg"
-                val values = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/ZZZGlip/diag")
-                }
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                uri?.let { 
-                    contentResolver.openOutputStream(it)?.use { out -> 
-                        atlasBitmap.compress(Bitmap.CompressFormat.JPEG, 70, out) 
-                    } 
-                }
-                atlasBitmap.recycle()
             } catch (e: Exception) {
-                atlasBitmap.recycle()
+                Log.e("ZZZGlip_Detection", "Detection loop error", e)
             }
         }
+        
+        reusableFullFrameBitmap?.recycle()
+        reusableFullFrameBitmap = null
+        reusableDetectionBitmap?.recycle()
+        reusableDetectionBitmap = null
     }
 
     private fun handleWipeoutDetected() {
@@ -1205,18 +906,94 @@ class ScreenRecorderService : Service() {
                 view.alpha = 0.4f
             }
         }
+        // 💡 外部スコープを使用して保存ジョブがキャンセルされないようにする
         serviceScope.launch(Dispatchers.Default) {
-            delay(5000)
-            saveBufferInternal(10000L, isAutoSave = true)
-            isAutoSavePending.set(false)
+            try {
+                delay(5000)
+                saveBufferInternal(10000L, isAutoSave = true)
+            } finally {
+                isAutoSavePending.set(false)
+            }
         }
     }
 
+    private fun saveEnhancedDiagnosticImage(roiBitmap: Bitmap, result: WipeoutDetector.DetectionResult, prefix: String) {
+        val binarized = result.binarizedBitmap ?: return
+        val templates = WipeoutDetector.getAllTemplates()
+        
+        // 💡 3段構成の画像を生成 (オリジナル、二値化、差分)
+        val combinedWidth = roiBitmap.width
+        val combinedHeight = roiBitmap.height * 3 + 20 // 余裕を持たせる
+        val combined = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(combined)
+        val paint = Paint()
 
+        // 1段目: オリジナル
+        canvas.drawBitmap(roiBitmap, 0f, 0f, paint)
+        
+        // 2段目: 二値化画像 (サイズをオリジナルに合わせる)
+        val binarizedScaled = Bitmap.createScaledBitmap(binarized, combinedWidth, roiBitmap.height, false)
+        canvas.drawBitmap(binarizedScaled, 0f, roiBitmap.height.toFloat() + 5, paint)
+        
+        // 3段目: 差分マップを合成
+        // 判定に使用された解像度での差分を作成し、拡大して描画
+        val diffLayer = Bitmap.createBitmap(binarized.width, binarized.height, Bitmap.Config.ARGB_8888)
+        val diffCanvas = Canvas(diffLayer)
+        
+        for (i in templates.indices) {
+            val bestX = result.bestXOffsets.getOrNull(i) ?: continue
+            val diffMap = WipeoutDetector.generateDiffMap(binarized, templates[i], bestX)
+            diffCanvas.drawBitmap(diffMap, bestX.toFloat(), 0f, paint)
+            diffMap.recycle()
+        }
+        
+        val diffScaled = Bitmap.createScaledBitmap(diffLayer, combinedWidth, roiBitmap.height, false)
+        canvas.drawBitmap(diffScaled, 0f, (roiBitmap.height * 2).toFloat() + 10, paint)
+        
+        diffLayer.recycle()
+        binarizedScaled.recycle()
+
+        // 非同期で保存
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US)
+                val timeStr = sdf.format(java.util.Calendar.getInstance().time)
+                val detail = if (result.matchedChars.isNotEmpty()) result.matchedChars.joinToString("") else "NONE"
+                val fileName = "${prefix}_${timeStr}_${detail}.png"
+                
+                val outputStream: java.io.OutputStream?
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                        put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/ZZZGlip/diag")
+                    }
+                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    outputStream = uri?.let { contentResolver.openOutputStream(it) }
+                } else {
+                    val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+                    val diagDir = File(dcimDir, "ZZZGlip/diag").apply { if (!exists()) mkdirs() }
+                    val file = File(diagDir, fileName)
+                    outputStream = java.io.FileOutputStream(file)
+                }
+
+                outputStream?.use {
+                    combined.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+                combined.recycle()
+                Log.d("ZZZGlip_Diag", "Saved enhanced diagnostic image: $fileName")
+            } catch (e: Exception) {
+                Log.e("ZZZGlip_Diag", "Failed to save diagnostic image", e)
+            }
+        }
+    }
 
     private fun stopEncoderOnly() {
-virtualDisplay?.surface = null; try { videoEncoder?.stop() } catch (e: Exception) {} finally { videoEncoder?.release(); videoEncoder = null }; try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }; videoEncoderSurface?.release(); videoEncoderSurface = null }
-    private fun stopRecording() { val was = isRecording.getAndSet(false); if (!was && mediaProjection == null) return; audioJob?.cancel(); audioJob = null; detectionJob?.cancel(); detectionJob = null; stopEncoderOnly(); virtualDisplay?.release(); virtualDisplay = null; audioRecord?.let { try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (e: Exception) {} ; try { it.release() } catch (e: Exception) {} }; audioRecord = null; synchronized(muxerLock) { try { if (muxerStarted) { if (samplesWrittenToCurrentMuxer) muxer?.stop(); muxer?.release() } } catch (e: Exception) {} ; muxer = null; muxerStarted = false; samplesWrittenToCurrentMuxer = false }; mediaProjection?.stop(); mediaProjection = null; segments.forEach { if (it.exists()) it.delete() }; segments.clear(); handler.post { floatingView?.let { try { windowManager.removeView(it) } catch (e: Exception) {} }; floatingView = null } }
+        virtualDisplay?.surface = null; try { videoEncoder?.stop() } catch (e: Exception) {} finally { videoEncoder?.release(); videoEncoder = null }; try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }; videoEncoderSurface?.release(); videoEncoderSurface = null 
+    }
+    private fun stopRecording() { 
+        val was = isRecording.getAndSet(false); if (!was && mediaProjection == null) return; audioJob?.cancel(); audioJob = null; detectionJob?.cancel(); detectionJob = null; stopEncoderOnly(); virtualDisplay?.release(); virtualDisplay = null; reusableFullFrameBitmap?.recycle(); reusableFullFrameBitmap = null; reusableDetectionBitmap?.recycle(); reusableDetectionBitmap = null; audioRecord?.let { try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (e: Exception) {} ; try { it.release() } catch (e: Exception) {} }; audioRecord = null; synchronized(muxerLock) { try { if (muxerStarted) { if (samplesWrittenToCurrentMuxer) muxer?.stop(); muxer?.release() } } catch (e: Exception) {} ; muxer = null; muxerStarted = false; samplesWrittenToCurrentMuxer = false }; mediaProjection?.stop(); mediaProjection = null; segments.forEach { if (it.exists()) it.delete() }; segments.clear(); handler.post { floatingView?.let { try { windowManager.removeView(it) } catch (e: Exception) {} }; floatingView = null }
+    }
     private fun createNotificationChannel() { val chan = NotificationChannel(CHANNEL_ID, "ZZZGlip Recorder", NotificationManager.IMPORTANCE_LOW); val manager = getSystemService(NotificationManager::class.java); manager.createNotificationChannel(chan) }
     private fun updateNotification() { val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager; manager.notify(NOTIFICATION_ID, createNotification(currentBufferTime)) }
     private fun createNotification(time: String): Notification { val stopPI = PendingIntent.getService(this, 0, Intent(this, ScreenRecorderService::class.java).apply { action = "STOP_SERVICE" }, PendingIntent.FLAG_IMMUTABLE); val listPI = PendingIntent.getActivity(this, 1, Intent(this, TimeSelectionActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT); return NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle("ZZZGlip Recording").setContentText("Buffer: $time").setSmallIcon(android.R.drawable.ic_media_play).setOngoing(true).addAction(0, "Stop", stopPI).addAction(0, "Time List", listPI).build() }
