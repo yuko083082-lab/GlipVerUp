@@ -48,23 +48,23 @@ object WipeoutDetector {
     // --- 文字幅と中心座標を個別に最適化した全7文字の型紙データ ---
     
     // W: 11px(中心), 23px(幅)
-    private val TEMPLATE_W = buildTemplate("W", 20, 11, """
-        00000000000000000000
-        11110000111100001111
-        11110001111100011111
-        11110001111100011111
-        11110011111100111111
-        01110111111101111111
-        01111111111111111110
-        01111111111111111100
-        01111111110111111100
-        00111111100111111000
-        00111111100111111000
-        00011111000111110000
-        00011111000111110000
-        00000000000000000000
-        00000000000000000000
-        00000000000000000000
+    private val TEMPLATE_W = buildTemplate("W", 17, 11, """
+        00000000000000000
+        10000111100001111
+        10001111100011111
+        10001111100011111
+        10011111100111111
+        10111111101111111
+        11111111111111110
+        11111111111111100
+        11111110111111100
+        11111100111111000
+        11111100111111000
+        11111000111110000
+        11111000111110000
+        00000000000000000
+        00000000000000000
+        00000000000000000
     """)
 
     // I: 30px(中心), 6px(幅)
@@ -93,8 +93,8 @@ object WipeoutDetector {
         00111111111000
         00111111111110
         00111111111110
-        01111100111110
-        01111100111110
+        01111110111110
+        01111101111110
         11111111111100
         11111111111000
         11111111110000
@@ -114,14 +114,14 @@ object WipeoutDetector {
         00111111111111
         01111111111111
         01111100000000
-        01111100000000
+        01111111111100
         11111111111100
         11111111111000
         11111100000000
-        11111100000000
         11111111111111
         11111111111111
-        11111111111110
+        11111111111111
+        00000000000000
         00000000000000
         00000000000000
         00000000000000
@@ -134,10 +134,10 @@ object WipeoutDetector {
         01111111111110
         11111111111111
         11111110111111
-        11111100111111
-        11111100111111
-        11111100111111
-        11111100111111
+        11111101111111
+        11111101111111
+        11111101111111
+        11111101111111
         11111101111111
         11111111111111
         01111111111110
@@ -158,33 +158,33 @@ object WipeoutDetector {
         11111101111110
         11111101111110
         11111101111110
-        11111101111110
-        11111101111110
-        01111101111100
+        11111111111110
+        11111111111110
         01111111111100
+        00000000000000
         00000000000000
         00000000000000
         00000000000000
     """)
 
     // T: 96px(中心), 15px(幅)
-    private val TEMPLATE_T = buildTemplate("T", 14, 96, """
-        11111111111111
-        11111111111111
-        11111111111111
-        11111111111111
-        00001111111000
-        00001111111000
-        00001111111000
-        00001111110000
-        00001111110000
-        00001111110000
-        00001111110000
-        00011111100000
-        00011111100000
-        00000000000000
-        00000000000000
-        00000000000000
+    private val TEMPLATE_T = buildTemplate("T", 11, 96, """
+        00000000000
+        11111111111
+        11111111111
+        11111111111
+        00001111111
+        00001111111
+        00001111111
+        00001111110
+        00001111110
+        00001111110
+        00001111110
+        00011111100
+        00000000000
+        00000000000
+        00000000000
+        00000000000
     """)
 
     private val ALL_TEMPLATES = arrayOf(
@@ -253,34 +253,36 @@ object WipeoutDetector {
                 charBestX[i] = bestXForThisChar
             }
 
-            // --- 💡 多段判定ロジック (改良版トリプルチェック) ---
-            val countOver80 = charScores.count { it >= 0.80f }
-            val countOver75 = charScores.count { it >= 0.75f }
-            val countOver70 = charScores.count { it >= 0.70f }
-            val minScore = charScores.minOrNull() ?: 0f
-
-            // 条件1: 80%以上が1文字以上 OR 75%以上が2文字以上
-            // 条件2: 70%以上が3文字以上
-            // 条件3: 全7文字が50%以上
-            val isDetected = ((countOver80 >= 1) || (countOver75 >= 2)) && (countOver70 >= 3) && (minScore >= 0.50f)
-
+            // 💡 FIFOバッファ側のロジックで判定するため、ここでは個別の「合格判定」のみを計算
+            // (Service側のスコア蓄積と整合性を取るため、最終判定はServiceに任せる)
             val matchedChars = ALL_TEMPLATES.indices.filter { charScores[it] >= CHAR_MATCH_THRESHOLD }.map { ALL_TEMPLATES[it].charName }
             val scoresList = charScores.toList()
             val xOffsets = charBestX.toList()
 
-            if (!isDetected && (countOver70 >= 2 || countOver75 >= 1)) {
-                // 惜しい時のデバッグログ
-                val detail = ALL_TEMPLATES.indices.joinToString(", ") { "${ALL_TEMPLATES[it].charName}:${String.format(java.util.Locale.US, "%.2f", charScores[it])}" }
-                android.util.Log.d("ZZZGlip_Detection", "Near miss (C1:$countOver75, C2:$countOver70, Min:$minScore): [$detail]")
-            }
-
             scaledBitmap.recycle()
-            return DetectionResult(isDetected, matchedChars, scoresList, xOffsets, binarized)
+            return DetectionResult(false, matchedChars, scoresList, xOffsets, binarized)
 
         } catch (e: Exception) {
             e.printStackTrace()
             return DetectionResult(false, emptyList(), emptyList(), emptyList())
         }
+    }
+
+    /**
+     * 💡 [新規] スコアリスト（各文字の最大値）を受け取り、トリプルチェック判定を行う
+     */
+    fun evaluateTripleCheck(scores: List<Float>): Boolean {
+        if (scores.size < ALL_TEMPLATES.size) return false
+        
+        val countOver80 = scores.count { it >= 0.80f }
+        val countOver75 = scores.count { it >= 0.75f }
+        val countOver70 = scores.count { it >= 0.70f }
+        val minScore = scores.minOrNull() ?: 0f
+
+        // 条件1: 80%以上が1文字以上 OR 75%以上が2文字以上
+        // 条件2: 70%以上が3文字以上
+        // 条件3: 全7文字が50%以上
+        return ((countOver80 >= 1) || (countOver75 >= 2)) && (countOver70 >= 3) && (minScore >= 0.50f)
     }
 
     private fun checkCharMatch(binarized: Bitmap, template: CharTemplate, startX: Int): Float {

@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.*
 import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
@@ -87,6 +88,7 @@ class ScreenRecorderService : Service() {
     private var reusableDetectionBitmap: Bitmap? = null
     private var reusableFullFrameBitmap: Bitmap? = null
     private val isDetectionProcessing = AtomicBoolean(false)
+    private val scoreHistory = LinkedList<List<Float>>()
 
     private var muxer: MediaMuxer? = null
     private val muxerLock = Any()
@@ -866,15 +868,38 @@ class ScreenRecorderService : Service() {
                             roiSnapshot = Bitmap.createBitmap(fullBitmap, left, top, targetW, targetH)
                             val result = WipeoutDetector.detectWipeout(roiSnapshot)
                             
-                            if (result.isDetected) {
-                                val detail = result.matchedChars.zip(result.scores).joinToString(", ") { "${it.first}: ${String.format(java.util.Locale.US, "%.2f", it.second)}" }
-                                android.util.Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED !!! Details: [$detail]")
+                            // 💡 FIFOバッファにスコアを蓄積 (直近20フレーム)
+                            synchronized(scoreHistory) {
+                                scoreHistory.addLast(result.scores)
+                                if (scoreHistory.size > 20) {
+                                    scoreHistory.removeFirst()
+                                }
+                            }
+
+                            // 💡 履歴の中から各文字ごとの最大スコアを算出
+                            val maxScores = List(7) { charIdx ->
+                                synchronized(scoreHistory) {
+                                    scoreHistory.maxOfOrNull { it[charIdx] } ?: 0f
+                                }
+                            }
+
+                            // 💡 最大スコアを使って最終判定
+                            if (WipeoutDetector.evaluateTripleCheck(maxScores)) {
+                                val templates = WipeoutDetector.getAllTemplates()
+                                val detail = templates.indices.joinToString(", ") { i ->
+                                    val name = templates[i].charName
+                                    val score = maxScores[i]
+                                    "$name: ${String.format(java.util.Locale.US, "%.2f", score)}"
+                                }
+                                Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED (FIFO MAX) !!! Details: [$detail]")
                                 
                                 handleWipeoutDetected()
                                 saveEnhancedDiagnosticImage(roiSnapshot, result, "hit")
+                                // HITした場合は履歴をリセットして重複検知を抑制
+                                synchronized(scoreHistory) { scoreHistory.clear() }
                             } else {
-                                val countOver75 = result.scores.count { it >= 0.75f }
-                                val countOver70 = result.scores.count { it >= 0.70f }
+                                val countOver75 = maxScores.count { it >= 0.75f }
+                                val countOver70 = maxScores.count { it >= 0.70f }
                                 if (countOver75 >= 1 || countOver70 >= 2) {
                                     saveEnhancedDiagnosticImage(roiSnapshot, result, "near")
                                 }
@@ -906,7 +931,6 @@ class ScreenRecorderService : Service() {
                 view.alpha = 0.4f
             }
         }
-        // 💡 外部スコープを使用して保存ジョブがキャンセルされないようにする
         serviceScope.launch(Dispatchers.Default) {
             try {
                 delay(5000)
@@ -921,22 +945,17 @@ class ScreenRecorderService : Service() {
         val binarized = result.binarizedBitmap ?: return
         val templates = WipeoutDetector.getAllTemplates()
         
-        // 💡 3段構成の画像を生成 (オリジナル、二値化、差分)
         val combinedWidth = roiBitmap.width
-        val combinedHeight = roiBitmap.height * 3 + 20 // 余裕を持たせる
+        val combinedHeight = roiBitmap.height * 3 + 20
         val combined = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(combined)
         val paint = Paint()
 
-        // 1段目: オリジナル
         canvas.drawBitmap(roiBitmap, 0f, 0f, paint)
         
-        // 2段目: 二値化画像 (サイズをオリジナルに合わせる)
         val binarizedScaled = Bitmap.createScaledBitmap(binarized, combinedWidth, roiBitmap.height, false)
         canvas.drawBitmap(binarizedScaled, 0f, roiBitmap.height.toFloat() + 5, paint)
         
-        // 3段目: 差分マップを合成
-        // 判定に使用された解像度での差分を作成し、拡大して描画
         val diffLayer = Bitmap.createBitmap(binarized.width, binarized.height, Bitmap.Config.ARGB_8888)
         val diffCanvas = Canvas(diffLayer)
         
@@ -953,11 +972,10 @@ class ScreenRecorderService : Service() {
         diffLayer.recycle()
         binarizedScaled.recycle()
 
-        // 非同期で保存
         serviceScope.launch(Dispatchers.IO) {
             try {
                 val sdf = java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS", java.util.Locale.US)
-                val timeStr = sdf.format(java.util.Calendar.getInstance().time)
+                val timeStr = sdf.format(Calendar.getInstance().time)
                 val detail = if (result.matchedChars.isNotEmpty()) result.matchedChars.joinToString("") else "NONE"
                 val fileName = "${prefix}_${timeStr}_${detail}.png"
                 
@@ -992,7 +1010,7 @@ class ScreenRecorderService : Service() {
         virtualDisplay?.surface = null; try { videoEncoder?.stop() } catch (e: Exception) {} finally { videoEncoder?.release(); videoEncoder = null }; try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }; videoEncoderSurface?.release(); videoEncoderSurface = null 
     }
     private fun stopRecording() { 
-        val was = isRecording.getAndSet(false); if (!was && mediaProjection == null) return; audioJob?.cancel(); audioJob = null; detectionJob?.cancel(); detectionJob = null; stopEncoderOnly(); virtualDisplay?.release(); virtualDisplay = null; reusableFullFrameBitmap?.recycle(); reusableFullFrameBitmap = null; reusableDetectionBitmap?.recycle(); reusableDetectionBitmap = null; audioRecord?.let { try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (e: Exception) {} ; try { it.release() } catch (e: Exception) {} }; audioRecord = null; synchronized(muxerLock) { try { if (muxerStarted) { if (samplesWrittenToCurrentMuxer) muxer?.stop(); muxer?.release() } } catch (e: Exception) {} ; muxer = null; muxerStarted = false; samplesWrittenToCurrentMuxer = false }; mediaProjection?.stop(); mediaProjection = null; segments.forEach { if (it.exists()) it.delete() }; segments.clear(); handler.post { floatingView?.let { try { windowManager.removeView(it) } catch (e: Exception) {} }; floatingView = null }
+        val was = isRecording.getAndSet(false); if (!was && mediaProjection == null) return; audioJob?.cancel(); audioJob = null; detectionJob?.cancel(); detectionJob = null; stopEncoderOnly(); virtualDisplay?.release(); virtualDisplay = null; reusableFullFrameBitmap?.recycle(); reusableFullFrameBitmap = null; reusableDetectionBitmap?.recycle(); reusableDetectionBitmap = null; synchronized(scoreHistory) { scoreHistory.clear() }; audioRecord?.let { try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (e: Exception) {} ; try { it.release() } catch (e: Exception) {} }; audioRecord = null; synchronized(muxerLock) { try { if (muxerStarted) { if (samplesWrittenToCurrentMuxer) muxer?.stop(); muxer?.release() } } catch (e: Exception) {} ; muxer = null; muxerStarted = false; samplesWrittenToCurrentMuxer = false }; mediaProjection?.stop(); mediaProjection = null; segments.forEach { if (it.exists()) it.delete() }; segments.clear(); handler.post { floatingView?.let { try { windowManager.removeView(it) } catch (e: Exception) {} }; floatingView = null }
     }
     private fun createNotificationChannel() { val chan = NotificationChannel(CHANNEL_ID, "ZZZGlip Recorder", NotificationManager.IMPORTANCE_LOW); val manager = getSystemService(NotificationManager::class.java); manager.createNotificationChannel(chan) }
     private fun updateNotification() { val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager; manager.notify(NOTIFICATION_ID, createNotification(currentBufferTime)) }
