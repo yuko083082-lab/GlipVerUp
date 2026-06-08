@@ -18,12 +18,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.interstitial.InterstitialAd
-import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.glipverup.app.BuildConfig
+import com.glipverup.app.ads.AdManager
+import com.glipverup.app.core.Constants
+import com.glipverup.app.permissions.PermissionHandler
 import com.glipverup.app.service.ScreenRecorderService
 import com.glipverup.app.ui.screens.MainScreen
 import com.glipverup.app.ui.screens.SettingsScreen
@@ -44,30 +42,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var projectionManager: MediaProjectionManager
     private var mainViewModel: MainViewModel? = null
-    private var mInterstitialAd: InterstitialAd? = null
-
-    private fun loadAd() {
-        if (BuildConfig.DEBUG) return
-        val adRequest = AdRequest.Builder().build()
-        InterstitialAd.load(this, "ca-app-pub-3940256099942544/1033173712", adRequest, object : InterstitialAdLoadCallback() {
-            override fun onAdLoaded(interstitialAd: InterstitialAd) {
-                mInterstitialAd = interstitialAd
-            }
-            override fun onAdFailedToLoad(loadAdError: LoadAdError) {
-                mInterstitialAd = null
-            }
-        })
-    }
-
-    private fun showAdIfAvailable() {
-        mInterstitialAd?.let {
-            it.show(this)
-            mInterstitialAd = null
-            loadAd()
-        } ?: run {
-            loadAd()
-        }
-    }
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -89,7 +63,7 @@ class MainActivity : ComponentActivity() {
     private val overlayLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (checkOverlayPermission(request = false)) {
+        if (PermissionHandler.hasOverlayPermission(this)) {
             startRecordingProcess()
         }
     }
@@ -98,8 +72,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         if (!BuildConfig.DEBUG) {
-            MobileAds.initialize(this) {}
-            loadAd()
+            AdManager.initialize(this)
         }
 
         val attributionContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -107,10 +80,11 @@ class MainActivity : ComponentActivity() {
         } else { this }
 
         projectionManager = attributionContext.getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        val filter = IntentFilter(Constants.Actions.RECORDING_STOPPED)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"), Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(stopReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(stopReceiver, IntentFilter("com.glipverup.app.RECORDING_STOPPED"))
+            registerReceiver(stopReceiver, filter)
         }
         
         requestNotificationPermission()
@@ -156,7 +130,7 @@ class MainActivity : ComponentActivity() {
         checkServiceRunning()
         if (intent?.getBooleanExtra("SHOW_AD", false) == true) {
             intent.removeExtra("SHOW_AD")
-            showAdIfAvailable()
+            AdManager.showAdIfAvailable(this)
         }
     }
 
@@ -165,7 +139,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         if (intent?.getBooleanExtra("SHOW_AD", false) == true) {
             intent.removeExtra("SHOW_AD")
-            showAdIfAvailable()
+            AdManager.showAdIfAvailable(this)
         }
     }
 
@@ -185,18 +159,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startRecordingProcess() {
-        if (checkOverlayPermission(request = true)) {
-            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
+        if (!PermissionHandler.hasOverlayPermission(this)) {
+            overlayLauncher.launch(PermissionHandler.getOverlayPermissionIntent(this))
+            return
+        }
+        if (!PermissionHandler.hasAudioPermission(this)) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
+        } else {
+            val intent = if (Build.VERSION.SDK_INT >= 34) {
+                val config = android.media.projection.MediaProjectionConfig.createConfigForUserChoice()
+                projectionManager.createScreenCaptureIntent(config)
             } else {
-                val intent = if (Build.VERSION.SDK_INT >= 34) {
-                    val config = android.media.projection.MediaProjectionConfig.createConfigForUserChoice()
-                    projectionManager.createScreenCaptureIntent(config)
-                } else {
-                    projectionManager.createScreenCaptureIntent()
-                }
-                screenCaptureLauncher.launch(intent)
+                projectionManager.createScreenCaptureIntent()
             }
+            screenCaptureLauncher.launch(intent)
         }
     }
 
@@ -206,9 +182,9 @@ class MainActivity : ComponentActivity() {
         } else { this }
 
         val intent = Intent(attributionContext, ScreenRecorderService::class.java).apply {
-            action = "START_RECORDING"
-            putExtra("resultCode", resultCode)
-            putExtra("data", data)
+            action = Constants.Actions.START_RECORDING
+            putExtra(Constants.Extras.RESULT_CODE, resultCode)
+            putExtra(Constants.Extras.DATA, data)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         try {
@@ -224,10 +200,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permission = "android.permission.POST_NOTIFICATIONS"
-            if (checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(permission), 102)
+        if (!PermissionHandler.hasNotificationPermission(this)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 102)
             }
         }
     }
@@ -250,25 +225,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkOverlayPermission(request: Boolean): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                if (request) {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    )
-                    overlayLauncher.launch(intent)
-                }
-                return false
-            }
-        }
-        return true
-    }
-
     private fun stopRecording() {
         val intent = Intent(this, ScreenRecorderService::class.java).apply {
-            action = "STOP_SERVICE"
+            action = Constants.Actions.STOP_SERVICE
         }
         startService(intent)
     }

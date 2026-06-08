@@ -5,7 +5,6 @@ import android.content.*
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.content.res.Configuration
 import android.hardware.display.VirtualDisplay
@@ -17,11 +16,15 @@ import android.provider.MediaStore
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.*
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
-import com.glipverup.app.R
+import com.glipverup.app.core.Constants
 import com.glipverup.app.data.SettingsManager
+import com.glipverup.app.detection.DetectionController
+import com.glipverup.app.overlay.FloatingViewManager
+import com.glipverup.app.recorder.AudioRecorder
+import com.glipverup.app.recorder.MuxerManager
+import com.glipverup.app.recorder.RecordingFileManager
+import com.glipverup.app.recorder.VideoEncoder
 import com.glipverup.app.util.WipeoutDetector
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
@@ -29,9 +32,7 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.*
-import java.util.concurrent.ConcurrentLinkedDeque
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.abs
 
 class ScreenRecorderService : Service() {
 
@@ -53,8 +54,13 @@ class ScreenRecorderService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private lateinit var settingsManager: SettingsManager
-    private var floatingView: View? = null
-    private var videoEncoderSurface: Surface? = null
+    
+    private var floatingViewManager: FloatingViewManager? = null
+    private var muxerManager: MuxerManager? = null
+    private lateinit var fileManager: RecordingFileManager
+    private var detectionController: DetectionController? = null
+    private var videoEncoderController: VideoEncoder = VideoEncoder()
+    private var audioRecorderController: AudioRecorder? = null
 
     private var captureWidth = 1280
     private var captureHeight = 720
@@ -62,11 +68,10 @@ class ScreenRecorderService : Service() {
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
 
-    private val CHANNEL_ID = "ZZZGlipChannel"
-    private val NOTIFICATION_ID = 1001
+    private val CHANNEL_ID = Constants.CHANNEL_ID
+    private val NOTIFICATION_ID = Constants.NOTIFICATION_ID
 
-    private val segmentDurationMs = 60000L
-    private val segments = ConcurrentLinkedDeque<File>()
+    private val segmentDurationMs = Constants.Intervals.SEGMENT_DURATION_MS
     private var sessionStartTimeMs = 0L
 
     private val handler = Handler(Looper.getMainLooper())
@@ -76,34 +81,12 @@ class ScreenRecorderService : Service() {
     private var currentBufferTime = "6 min"
     private var isWipeoutDetectionEnabled = false
 
-    private var lastFloatingX = 0
-    private var lastFloatingY = 0
-
-    private var videoEncoder: MediaCodec? = null
     private var audioEncoder: MediaCodec? = null
-    private var audioRecord: AudioRecord? = null
     private var audioJob: Job? = null
-    private var detectionJob: Job? = null
     
-    private var reusableDetectionBitmap: Bitmap? = null
-    private var reusableFullFrameBitmap: Bitmap? = null
-    private val isDetectionProcessing = AtomicBoolean(false)
-    private val scoreHistory = LinkedList<List<Float>>()
-
-    private var muxer: MediaMuxer? = null
-    private val muxerLock = Any()
-    private var videoTrackIndex = -1
-    private var audioTrackIndex = -1
     private var lastMuxerRotationTimeMs = 0L
-    private var muxerStarted = false
-    private var samplesWrittenToCurrentMuxer = false
     private var rotateMuxerNextLoop = false
     private var pendingRotationRestart = false
-
-    private var persistedVideoFormat: MediaFormat? = null
-    private var persistedAudioFormat: MediaFormat? = null
-
-    private var audioSampleCount = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -115,6 +98,35 @@ class ScreenRecorderService : Service() {
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         settingsManager = SettingsManager(this)
+        
+        fileManager = RecordingFileManager(this, cacheDir)
+        muxerManager = MuxerManager(cacheDir)
+        
+        audioRecorderController = AudioRecorder(
+            context = this,
+            scope = serviceScope,
+            audioEncoderProvider = { audioEncoder },
+            muxerManagerProvider = { muxerManager }
+        )
+        
+        floatingViewManager = FloatingViewManager(this, windowManager, settingsManager, serviceScope) {
+            if (!isSaving.get()) {
+                saveLastMinutes()
+            }
+        }
+
+        detectionController = DetectionController(
+            serviceScope,
+            handler,
+            onWipeoutDetected = { roi, result ->
+                handleWipeoutDetected()
+                saveEnhancedDiagnosticImage(roi, result, "hit")
+            },
+            onNearDetected = { roi, result ->
+                saveEnhancedDiagnosticImage(roi, result, "near")
+            }
+        )
+        
         createNotificationChannel()
 
         serviceScope.launch {
@@ -128,26 +140,19 @@ class ScreenRecorderService : Service() {
                 isWipeoutDetectionEnabled = enabled
             }
         }
-
-        serviceScope.launch {
-            settingsManager.floatingXFlow.collectLatest { lastFloatingX = it ?: 0 }
-        }
-        serviceScope.launch {
-            settingsManager.floatingYFlow.collectLatest { lastFloatingY = it ?: 0 }
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "START_RECORDING" -> handleStartRecording(intent)
-            "STOP_SERVICE" -> {
+            Constants.Actions.START_RECORDING -> handleStartRecording(intent)
+            Constants.Actions.STOP_SERVICE -> {
                 stopRecording()
-                sendBroadcast(Intent("com.glipverup.app.RECORDING_STOPPED").apply { setPackage(packageName) })
+                sendBroadcast(Intent(Constants.Actions.RECORDING_STOPPED).apply { setPackage(packageName) })
                 stopSelf()
             }
-            "SAVE_BUFFER" -> saveLastMinutes()
-            "CHANGE_TIME" -> {
-                val newTime = intent.getStringExtra("selected_time")
+            Constants.Actions.SAVE_BUFFER -> saveLastMinutes()
+            Constants.Actions.CHANGE_TIME -> {
+                val newTime = intent.getStringExtra(Constants.Extras.SELECTED_TIME)
                 if (newTime != null) {
                     serviceScope.launch {
                         settingsManager.updateBufferTime(newTime)
@@ -180,15 +185,15 @@ class ScreenRecorderService : Service() {
         serviceScope.launch(Dispatchers.Main) {
             delay(1000)
 
-            cleanLegacyFiles()
+            fileManager.cleanLegacyFiles()
             sessionStartTimeMs = System.currentTimeMillis()
 
-            val resultCode = intent.getIntExtra("resultCode", Activity.RESULT_CANCELED)
+            val resultCode = intent.getIntExtra(Constants.Extras.RESULT_CODE, Activity.RESULT_CANCELED)
             val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableExtra("data", Intent::class.java)
+                intent.getParcelableExtra(Constants.Extras.DATA, Intent::class.java)
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableExtra("data")
+                intent.getParcelableExtra(Constants.Extras.DATA)
             } ?: return@launch
 
             try {
@@ -206,22 +211,24 @@ class ScreenRecorderService : Service() {
                 projection.registerCallback(object : MediaProjection.Callback() {
                     override fun onStop() {
                         stopRecording()
-                        sendBroadcast(Intent("com.glipverup.app.RECORDING_STOPPED").apply { setPackage(packageName) })
+                        sendBroadcast(Intent(Constants.Actions.RECORDING_STOPPED).apply { setPackage(packageName) })
                         stopSelf()
                     }
                 }, handler)
 
                 isRecording.set(true)
-                initializeAudioRecord(projection)
-                showFloatingButton()
+                audioRecorderController?.initialize(projection)
+                floatingViewManager?.show()
                 
-                // 💡 録画開始時に一度だけ検知ループを開始 (SecurityException対策)
-                if (isWipeoutDetectionEnabled && (detectionJob == null || detectionJob?.isActive == false)) {
-                    detectionJob = serviceScope.launch(Dispatchers.Default) {
-                        delay(1000)
-                        startDetectionLoop()
-                    }
-                }
+                detectionController?.start(
+                    virtualDisplayProvider = { virtualDisplay },
+                    isRecordingProvider = { isRecording.get() },
+                    isEnabledProvider = { isWipeoutDetectionEnabled },
+                    isSavingProvider = { isSaving.get() },
+                    rotateMuxerNextLoopProvider = { rotateMuxerNextLoop },
+                    captureWidth = captureWidth,
+                    captureHeight = captureHeight
+                )
                 
                 startRecordingMainLoop()
             } catch (e: Exception) {
@@ -254,86 +261,6 @@ class ScreenRecorderService : Service() {
         }
     }
 
-    private suspend fun initializeAudioRecord(projection: MediaProjection) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && audioRecord == null) {
-            if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                try {
-                    delay(500)
-                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    var focusRequest: AudioFocusRequest? = null
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                            .setAudioAttributes(AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_GAME)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .build())
-                            .build()
-                        am.requestAudioFocus(focusRequest)
-                        delay(200)
-                    }
-
-                    val config = AudioPlaybackCaptureConfiguration.Builder(projection)
-                        .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                        .addMatchingUsage(AudioAttributes.USAGE_GAME)
-                        .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                        .addMatchingUsage(AudioAttributes.USAGE_ASSISTANT)
-                        .addMatchingUsage(AudioAttributes.USAGE_NOTIFICATION)
-                        .build()
-
-                    val sampleRate = 48000
-                    val minBufSize = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT)
-                    val bufferSize = maxOf(minBufSize, 4096 * 8)
-
-                    val record = try {
-                        val builder = AudioRecord.Builder()
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            builder.setContext(this)
-                        }
-                        builder.setAudioFormat(AudioFormat.Builder()
-                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
-                            .build())
-                            .setBufferSizeInBytes(bufferSize)
-                            .setAudioPlaybackCaptureConfig(config)
-                            .build()
-                    } catch (e: Exception) {
-                        null
-                    }
-
-                    if (record != null && record.state == AudioRecord.STATE_INITIALIZED) {
-                        audioRecord = record
-                        delay(500)
-                        if (record.state == AudioRecord.STATE_INITIALIZED) {
-                            try {
-                                record.startRecording()
-                            } catch (e: Exception) {
-                            }
-                        } else {
-                            record.release()
-                        }
-                    } else {
-                        record?.release()
-                    }
-
-                    focusRequest?.let { am.abandonAudioFocusRequest(it) }
-
-                } catch (e: Exception) {
-                }
-            }
-        }
-    }
-
-    private fun cleanLegacyFiles() {
-        try {
-            val files = cacheDir.listFiles()
-            files?.forEach { if (it.name.startsWith("seg_")) it.delete() }
-            segments.clear()
-            persistedVideoFormat = null
-            persistedAudioFormat = null
-        } catch (e: Exception) { }
-    }
-
     private suspend fun prepareAndStartRecording(projection: MediaProjection) {
         val resStr = settingsManager.resolutionFlow.first()
         val fps = settingsManager.fpsFlow.first()
@@ -345,7 +272,8 @@ class ScreenRecorderService : Service() {
             windowManager.defaultDisplay.getRealMetrics(metrics)
         }
 
-        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val lastOrientation = resources.configuration.orientation
+        val isLandscape = lastOrientation == Configuration.ORIENTATION_LANDSCAPE
         val baseRes = when(resStr) {
             "480p" -> Pair(848, 480)
             "1080p" -> Pair(1920, 1080)
@@ -359,17 +287,7 @@ class ScreenRecorderService : Service() {
         captureWidth = vW
         captureHeight = vH
 
-        val vFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, vW, vH).apply {
-            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, bitrate * 1024 * 1024)
-            setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-            setInteger(MediaFormat.KEY_PRIORITY, 0)
-        }
-        videoEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-        videoEncoder?.configure(vFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        videoEncoderSurface = videoEncoder?.createInputSurface()
-        videoEncoder?.start()
+        val videoSurface = videoEncoderController.initialize(vW, vH, bitrate, fps)
 
         val aFormat = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, 48000, 2).apply {
             setInteger(MediaFormat.KEY_BIT_RATE, 128000)
@@ -382,136 +300,51 @@ class ScreenRecorderService : Service() {
 
         if (virtualDisplay == null) {
             virtualDisplay = projection.createVirtualDisplay("ZZZGlipCapture", vW, vH, metrics.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, videoEncoderSurface, null, null)
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, videoSurface, null, null)
         } else {
             virtualDisplay?.resize(vW, vH, metrics.densityDpi)
-            virtualDisplay?.surface = videoEncoderSurface
+            virtualDisplay?.surface = videoSurface
         }
 
         rotateMuxer()
         lastMuxerRotationTimeMs = System.currentTimeMillis()
 
-        recordingLoop()
+        recordingLoop(lastOrientation)
     }
 
     private fun rotateMuxer() {
-        synchronized(muxerLock) {
-            try {
-                if (muxerStarted && samplesWrittenToCurrentMuxer) {
-                    try { muxer?.stop() } catch (e: Exception) { }
-                }
-                muxer?.release()
-            } catch (e: Exception) { }
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        
+        val bufferMinutes = when(currentBufferTime) {
+            "6 min" -> 6
+            "5 min" -> 5
+            "3 min" -> 3
+            "1 min" -> 1
+            "30 sec" -> 1
+            "15 sec" -> 1
+            else -> 1
+        }
+        val maxSegments = kotlin.math.ceil(bufferMinutes * 1.2).toInt().coerceAtLeast(1)
 
-            val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-            val suffix = if (isLandscape) "L" else "P"
-            val file = File(cacheDir, "seg_${System.currentTimeMillis()}_$suffix.mp4")
-            segments.add(file)
+        if (pendingRotationRestart) {
+            muxerManager?.resetTimeline()
+            pendingRotationRestart = false
+        }
 
-            // 💡 設定時間に応じた上限値を計算 (設定分 * 1.2 を切り上げ)
-            val bufferMinutes = when(currentBufferTime) {
-                "6 min" -> 6
-                "5 min" -> 5
-                "3 min" -> 3
-                "1 min" -> 1
-                "30 sec" -> 1 // 最低 1
-                "15 sec" -> 1 // 最低 1
-                else -> 1
-            }
-            val maxSegments = kotlin.math.ceil(bufferMinutes * 1.2).toInt().coerceAtLeast(1)
-
-            while (segments.size > maxSegments) {
-                val oldest = segments.pollFirst()
-                if (oldest != null && oldest.exists()) oldest.delete()
-            }
-
-            try {
-                if (pendingRotationRestart) {
-                    persistedVideoFormat = null
-                    persistedAudioFormat = null
-                    pendingRotationRestart = false
-                    videoTimelineOffsetUs = -1L
-                    audioTimelineOffsetUs = -1L
-                }
-
-                muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-                videoTrackIndex = -1
-                audioTrackIndex = -1
-                muxerStarted = false
-                samplesWrittenToCurrentMuxer = false
-                segmentFirstPtsUs = -1L
-                rotateMuxerNextLoop = false
-
-                persistedVideoFormat?.let { videoTrackIndex = muxer?.addTrack(it) ?: -1 }
-                persistedAudioFormat?.let { audioTrackIndex = muxer?.addTrack(it) ?: -1 }
-                checkMuxerStart()
-            } catch (e: Exception) {
-            }
+        muxerManager?.rotateMuxer(isLandscape, maxSegments) {
+            rotateMuxerNextLoop = false
         }
     }
 
-    private fun checkMuxerStart() {
-        if (!muxerStarted && videoTrackIndex >= 0 && (audioTrackIndex >= 0 || audioRecord == null)) {
-            try {
-                muxer?.start()
-                muxerStarted = true
-            } catch (e: Exception) {
-            }
-        }
-    }
-
-    private var videoTimelineOffsetUs = -1L
-    private var audioTimelineOffsetUs = -1L
-    private var segmentFirstPtsUs = -1L
-
-    private suspend fun audioRecordingLoop(audioPCMBuffer: ByteBuffer) {
-        audioLoop@while (isRecording.get() && !pendingRotationRestart) {
-            val record = audioRecord ?: run { delay(100); break@audioLoop }
-
-            audioPCMBuffer.clear()
-            val read = try { record.read(audioPCMBuffer, audioPCMBuffer.capacity()) } catch (e: Exception) { -1 }
-            if (read > 0) {
-                val inputIndex = try { audioEncoder?.dequeueInputBuffer(1000) ?: -1 } catch (e: Exception) { -1 }
-                if (inputIndex >= 0) {
-                    val inputBuffer = audioEncoder?.getInputBuffer(inputIndex)
-                    inputBuffer?.clear()
-                    audioPCMBuffer.limit(read)
-                    inputBuffer?.put(audioPCMBuffer)
-
-                    if (audioTimelineOffsetUs == -1L) {
-                        audioTimelineOffsetUs = System.nanoTime() / 1000
-                    }
-
-                    val ptsUs = audioSampleCount * 1_000_000L / 48000L
-                    audioEncoder?.queueInputBuffer(inputIndex, 0, read, ptsUs, 0)
-                    audioSampleCount += (read / 4)
-                }
-            } else if (read < 0) {
-                if (isRecording.get() && !pendingRotationRestart) {
-                    delay(100)
-                    currentCoroutineContext().cancel()
-                    break@audioLoop
-                }
-            }
-        }
-    }
-
-    private suspend fun recordingLoop() {
+    private suspend fun recordingLoop(lastOrientation: Int) {
         val vBufferInfo = MediaCodec.BufferInfo()
         val aBufferInfo = MediaCodec.BufferInfo()
-        val audioPCMBuffer = ByteBuffer.allocateDirect(4096)
 
-        val lastOrientation = resources.configuration.orientation
-        segmentFirstPtsUs = -1L
-        audioSampleCount = 0L
-        videoTimelineOffsetUs = -1L
-        audioTimelineOffsetUs = -1L
+        muxerManager?.resetTimeline()
         lastMuxerRotationTimeMs = System.currentTimeMillis()
         pendingRotationRestart = false
 
-        audioJob = serviceScope.launch(Dispatchers.IO) {
-            audioRecordingLoop(audioPCMBuffer)
-        }
+        audioRecorderController?.startLoop(isRecording) { pendingRotationRestart }
 
         while (isRecording.get() && !pendingRotationRestart) {
             val currentOrientation = resources.configuration.orientation
@@ -528,35 +361,35 @@ class ScreenRecorderService : Service() {
                 rotateMuxerNextLoop = false
             }
 
-            videoEncoder?.let { encoder ->
+            videoEncoderController.encoder?.let { encoder ->
                 val outIdx = try { encoder.dequeueOutputBuffer(vBufferInfo, 1000) } catch (_: Exception) { -1 }
                 if (outIdx >= 0) {
                     val buffer = encoder.getOutputBuffer(outIdx)
                     if (buffer != null) {
-                        val nowUs = System.nanoTime() / 1000
-                        if (videoTimelineOffsetUs == -1L) {
-                            videoTimelineOffsetUs = nowUs - vBufferInfo.presentationTimeUs
-                        }
-                        val absoluteVideoPts = vBufferInfo.presentationTimeUs + videoTimelineOffsetUs
+                        val manager = muxerManager
+                        if (manager != null) {
+                            val nowUs = System.nanoTime() / 1000
+                            if (manager.videoTimelineOffsetUs == -1L) {
+                                manager.videoTimelineOffsetUs = nowUs - vBufferInfo.presentationTimeUs
+                            }
+                            val absoluteVideoPts = vBufferInfo.presentationTimeUs + manager.videoTimelineOffsetUs
 
-                        if (rotateMuxerNextLoop && (vBufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0)) {
-                            rotateMuxer()
-                            lastMuxerRotationTimeMs = System.currentTimeMillis()
-                            rotateMuxerNextLoop = false
-                        }
+                            if (rotateMuxerNextLoop && (vBufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0)) {
+                                rotateMuxer()
+                                lastMuxerRotationTimeMs = System.currentTimeMillis()
+                                rotateMuxerNextLoop = false
+                            }
 
-                        synchronized(muxerLock) {
-                            if (videoTrackIndex >= 0 && muxerStarted) {
-                                if (segmentFirstPtsUs == -1L) {
-                                    segmentFirstPtsUs = absoluteVideoPts
+                            if (manager.videoTrackIndex >= 0 && manager.muxerStarted) {
+                                if (manager.segmentFirstPtsUs == -1L) {
+                                    manager.segmentFirstPtsUs = absoluteVideoPts
                                 }
                                 try {
                                     if ((vBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                                        val pts = absoluteVideoPts - segmentFirstPtsUs
+                                        val pts = absoluteVideoPts - manager.segmentFirstPtsUs
                                         if (pts >= 0) {
                                             vBufferInfo.presentationTimeUs = pts
-                                            muxer?.writeSampleData(videoTrackIndex, buffer, vBufferInfo)
-                                            samplesWrittenToCurrentMuxer = true
+                                            manager.writeSampleData(manager.videoTrackIndex, buffer, vBufferInfo)
                                         }
                                     }
                                 } catch (e: Exception) { }
@@ -565,13 +398,7 @@ class ScreenRecorderService : Service() {
                     }
                     try { encoder.releaseOutputBuffer(outIdx, false) } catch (e: Exception) {}
                 } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    synchronized(muxerLock) {
-                        persistedVideoFormat = encoder.outputFormat
-                        if (videoTrackIndex < 0) {
-                            videoTrackIndex = muxer?.addTrack(persistedVideoFormat!!) ?: -1
-                            checkMuxerStart()
-                        }
-                    }
+                    muxerManager?.addTrack(encoder.outputFormat, isVideo = true)
                 }
             }
 
@@ -580,19 +407,19 @@ class ScreenRecorderService : Service() {
                 if (outIdx >= 0) {
                     val buffer = encoder.getOutputBuffer(outIdx)
                     if (buffer != null) {
-                        val absoluteAudioPts = aBufferInfo.presentationTimeUs + audioTimelineOffsetUs
-                        synchronized(muxerLock) {
-                            if (audioTrackIndex >= 0 && muxerStarted) {
-                                if (segmentFirstPtsUs == -1L) {
-                                    segmentFirstPtsUs = absoluteAudioPts
+                        val manager = muxerManager
+                        if (manager != null) {
+                            val absoluteAudioPts = aBufferInfo.presentationTimeUs + manager.audioTimelineOffsetUs
+                            if (manager.audioTrackIndex >= 0 && manager.muxerStarted) {
+                                if (manager.segmentFirstPtsUs == -1L) {
+                                    manager.segmentFirstPtsUs = absoluteAudioPts
                                 }
                                 try {
                                     if ((aBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                                        val pts = absoluteAudioPts - segmentFirstPtsUs
+                                        val pts = absoluteAudioPts - manager.segmentFirstPtsUs
                                         if (pts >= 0) {
                                             aBufferInfo.presentationTimeUs = pts
-                                            muxer?.writeSampleData(audioTrackIndex, buffer, aBufferInfo)
-                                            samplesWrittenToCurrentMuxer = true
+                                            manager.writeSampleData(manager.audioTrackIndex, buffer, aBufferInfo)
                                         }
                                     }
                                 } catch (e: Exception) { }
@@ -601,21 +428,13 @@ class ScreenRecorderService : Service() {
                     }
                     try { encoder.releaseOutputBuffer(outIdx, false) } catch (e: Exception) {}
                 } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    synchronized(muxerLock) {
-                        persistedAudioFormat = encoder.outputFormat
-                        if (audioTrackIndex < 0) {
-                            audioTrackIndex = muxer?.addTrack(persistedAudioFormat!!) ?: -1
-                            checkMuxerStart()
-                        }
-                    }
+                    muxerManager?.addTrack(encoder.outputFormat, isVideo = false)
                 }
             }
 
             delay(5)
         }
-        audioJob?.cancel()
-        try { audioJob?.join() } catch (e: Exception) {}
-        audioJob = null
+        audioRecorderController?.stop()
     }
 
     private fun saveLastMinutes() {
@@ -635,16 +454,7 @@ class ScreenRecorderService : Service() {
         if (isSaving.getAndSet(true)) return
         serviceScope.launch(Dispatchers.Default) {
             try {
-                withContext(Dispatchers.Main) {
-                    floatingView?.let { view ->
-                        view.findViewById<View>(R.id.save_progress)?.visibility = View.VISIBLE
-                        val saveBtn = view.findViewById<android.widget.TextView>(R.id.btn_save)
-                        if (isAutoSave) {
-                            if (saveBtn?.text != "WO!") saveBtn?.text = "WO!"
-                        }
-                        if (view.alpha != 0.4f) view.alpha = 0.4f
-                    }
-                }
+                floatingViewManager?.setSavingMode(true, isWipeout = isAutoSave)
 
                 rotateMuxerNextLoop = true
                 var waitCount = 0
@@ -658,34 +468,20 @@ class ScreenRecorderService : Service() {
                     rotateMuxerNextLoop = false
                 }
 
-                val landscapeCount = segments.count { it.name.endsWith("_L.mp4") }
-                val portraitCount = segments.count { it.name.endsWith("_P.mp4") }
+                val landscapeCount = muxerManager?.segments?.count { it.name.endsWith("_L.mp4") } ?: 0
+                val portraitCount = muxerManager?.segments?.count { it.name.endsWith("_P.mp4") } ?: 0
                 val targetSuffix = if (landscapeCount >= portraitCount) "_L.mp4" else "_P.mp4"
 
-                val available = segments.filter { it.exists() && it.name.endsWith(targetSuffix) && it.lastModified() >= (sessionStartTimeMs - 2000) }.toList()
+                val available = muxerManager?.segments?.filter { it.exists() && it.name.endsWith(targetSuffix) && it.lastModified() >= (sessionStartTimeMs - 2000) }?.toList() ?: emptyList()
 
                 if (available.isNotEmpty()) {
                     Log.d("ZZZGlip_Save", "Starting merge for ${available.size} files, targetMs=$targetMs")
                     withContext(Dispatchers.IO) {
                         val fileName = "clip_${System.currentTimeMillis()}.mp4"
-                        val pfd: ParcelFileDescriptor?
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            val contentValues = ContentValues().apply {
-                                put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
-                                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                                put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/ZZZGlip")
-                            }
-                            val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-                            pfd = uri?.let { contentResolver.openFileDescriptor(it, "w") }
-                        } else {
-                            val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-                            val appDir = File(dcimDir, "ZZZGlip").apply { if (!exists()) mkdirs() }
-                            val outFile = File(appDir, fileName)
-                            pfd = ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_CREATE)
-                        }
+                        val pfd = fileManager.createVideoFileDescriptor(fileName)
 
                         if (pfd != null) {
-                            fastMergeFiles(available, targetMs, pfd)
+                            fileManager.fastMergeFiles(available, targetMs, pfd)
                             pfd.close()
                             Log.i("ZZZGlip_Save", "Successfully saved video: $fileName")
                         } else {
@@ -693,260 +489,25 @@ class ScreenRecorderService : Service() {
                         }
                     }
                 } else {
-                    Log.w("ZZZGlip_Save", "No matching segment files found (suffix=$targetSuffix, count=${segments.size})")
+                    Log.w("ZZZGlip_Save", "No matching segment files found (suffix=$targetSuffix, count=${muxerManager?.segments?.size ?: 0})")
                 }
             } catch (e: Exception) {
                 Log.e("ZZZGlip_Save", "CRITICAL ERROR during save: ${e.message}", e)
             } finally {
                 isSaving.set(false)
-                withContext(Dispatchers.Main) {
-                    floatingView?.findViewById<View>(R.id.save_progress)?.visibility = View.GONE
-                    floatingView?.findViewById<android.widget.TextView>(R.id.btn_save)?.text = "SAVE"
-                    floatingView?.alpha = 0.6f
-                }
+                floatingViewManager?.setSavingMode(false)
             }
         }
-    }
-
-    private fun fastMergeFiles(files: List<File>, targetMs: Long, pfd: ParcelFileDescriptor) {
-        val muxer = MediaMuxer(pfd.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        val durations = files.associateWith { getFileDuration(it) }
-        var accumulated = 0L
-        val toMerge = mutableListOf<File>()
-        for (f in files.reversed()) {
-            val d = durations[f] ?: 0L
-            if (d == 0L) continue
-            toMerge.add(0, f)
-            accumulated += d
-            if (accumulated >= targetMs) break
-        }
-        if (toMerge.isEmpty()) { muxer.release(); return }
-
-        var videoFmt: MediaFormat? = null
-        var audioFmt: MediaFormat? = null
-        for (f in toMerge) {
-            val ex = MediaExtractor()
-            try {
-                ex.setDataSource(f.absolutePath)
-                for (i in 0 until ex.trackCount) {
-                    val fmt = ex.getTrackFormat(i)
-                    val mime = fmt.getString(MediaFormat.KEY_MIME) ?: ""
-                    if (videoFmt == null && mime.startsWith("video/")) videoFmt = fmt
-                    if (audioFmt == null && mime.startsWith("audio/")) audioFmt = fmt
-                }
-            } catch (_: Exception) {} finally { ex.release() }
-            if (videoFmt != null && audioFmt != null) break
-        }
-
-        if (videoFmt == null) { muxer.release(); return }
-        val vTIdx = muxer.addTrack(videoFmt)
-        val aTIdx = if (audioFmt != null) muxer.addTrack(audioFmt) else -1
-        try { muxer.start() } catch (e: Exception) { muxer.release(); return }
-
-        val buffer = ByteBuffer.allocate(4 * 1024 * 1024)
-        val info = MediaCodec.BufferInfo()
-        var globalFileOffsetUs = 0L
-        val startClipUs = if (accumulated > targetMs) (accumulated - targetMs) * 1000 else 0L
-        var firstFramePtsInSession = -1L
-        var samplesWritten = false
-
-        for (i in toMerge.indices) {
-            val f = toMerge[i]
-            val e = MediaExtractor()
-            try {
-                e.setDataSource(f.absolutePath)
-                val vi = (0 until e.trackCount).firstOrNull { e.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
-                val ai = (0 until e.trackCount).firstOrNull { e.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
-                var fileMinPtsUs = Long.MAX_VALUE
-                if (vi != null) { e.selectTrack(vi); if (i == 0) e.seekTo(startClipUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC); if (e.sampleTime != -1L) fileMinPtsUs = minOf(fileMinPtsUs, e.sampleTime); e.unselectTrack(vi) }
-                if (ai != null) { e.selectTrack(ai); if (i == 0) e.seekTo(startClipUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC); if (e.sampleTime != -1L) fileMinPtsUs = minOf(fileMinPtsUs, e.sampleTime); e.unselectTrack(ai) }
-                if (fileMinPtsUs == Long.MAX_VALUE) fileMinPtsUs = 0L
-                if (vi != null) e.selectTrack(vi)
-                if (ai != null && aTIdx != -1) e.selectTrack(ai)
-                if (i == 0) e.seekTo(startClipUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-                else e.seekTo(0, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-                var maxPtsInFile = 0L
-                while (true) {
-                    val trackIdxInFile = e.sampleTrackIndex
-                    if (trackIdxInFile < 0) break
-                    val targetTIdx = if (trackIdxInFile == vi) vTIdx else if (trackIdxInFile == ai) aTIdx else -1
-                    if (targetTIdx == -1) { e.advance(); continue }
-                    val size = e.readSampleData(buffer, 0)
-                    if (size < 0) break
-                    val rawPts = e.sampleTime
-                    val pts = globalFileOffsetUs + (rawPts - fileMinPtsUs)
-                    if (firstFramePtsInSession == -1L) firstFramePtsInSession = pts
-                    @Suppress("WrongConstant") info.set(0, size, pts - firstFramePtsInSession, e.sampleFlags)
-                    muxer.writeSampleData(targetTIdx, buffer, info)
-                    maxPtsInFile = maxOf(maxPtsInFile, pts - firstFramePtsInSession)
-                    samplesWritten = true
-                    e.advance()
-                }
-                globalFileOffsetUs = firstFramePtsInSession + maxPtsInFile + 1000L
-            } catch (e: Exception) { } finally { e.release() }
-        }
-        try { if (samplesWritten) muxer.stop() } catch (e: Exception) {} finally { muxer.release() }
-    }
-
-    private fun getFileDuration(file: File): Long {
-        val r = MediaMetadataRetriever()
-        return try { r.setDataSource(file.absolutePath); r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0L }
-        catch (_: Exception) { 0L } finally { r.release() }
-    }
-
-    private fun showFloatingButton() {
-        serviceScope.launch {
-            try {
-                val savedX = settingsManager.floatingXFlow.first()
-                val savedY = settingsManager.floatingYFlow.first()
-                withContext(Dispatchers.Main) {
-                    val metrics = DisplayMetrics()
-                    @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(metrics)
-                    floatingView = LayoutInflater.from(this@ScreenRecorderService).inflate(R.layout.layout_floating_button, null).apply { alpha = 0.6f }
-                    val params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply {
-                        gravity = Gravity.TOP or Gravity.START
-                        x = savedX ?: (metrics.widthPixels - 200)
-                        y = savedY ?: (metrics.heightPixels - 400)
-                    }
-                    floatingView?.setOnTouchListener(object : View.OnTouchListener {
-                        private var iX = 0; private var iY = 0; private var itX = 0f; private var itY = 0f; private var mv = false
-                        override fun onTouch(v: View, e: MotionEvent): Boolean {
-                            when (e.action) {
-                                MotionEvent.ACTION_DOWN -> { iX = params.x; iY = params.y; itX = e.rawX; itY = e.rawY; mv = false }
-                                MotionEvent.ACTION_MOVE -> {
-                                    val dx = (e.rawX - itX).toInt(); val dy = (e.rawY - itY).toInt()
-                                    if (abs(dx) > 10 || abs(dy) > 10) {
-                                        mv = true
-                                        val m = DisplayMetrics(); @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(m)
-                                        params.x = (iX + dx).coerceIn(0, (m.widthPixels - v.width).coerceAtLeast(0))
-                                        params.y = (iY + dy).coerceIn(0, (m.heightPixels - v.height).coerceAtLeast(0))
-                                        windowManager.updateViewLayout(floatingView, params)
-                                    }
-                                }
-                                MotionEvent.ACTION_UP -> { if (mv) { serviceScope.launch { settingsManager.saveFloatingPosition(params.x, params.y) } } else if (!isSaving.get()) { saveLastMinutes() } }
-                            }
-                            return true
-                        }
-                    })
-                    windowManager.addView(floatingView, params)
-                }
-            } catch (e: Exception) { }
-        }
-    }
-
-    private suspend fun startDetectionLoop() {
-        while (isRecording.get() && isWipeoutDetectionEnabled) {
-            delay(100)
-            if (isSaving.get() || rotateMuxerNextLoop || isDetectionProcessing.get()) continue
-
-            val vd = virtualDisplay ?: continue
-            val surface = vd.surface ?: continue
-            if (!surface.isValid) continue
-
-            try {
-                if (reusableFullFrameBitmap == null || reusableFullFrameBitmap!!.width != captureWidth || reusableFullFrameBitmap!!.height != captureHeight) {
-                    reusableFullFrameBitmap?.recycle()
-                    reusableFullFrameBitmap = Bitmap.createBitmap(captureWidth, captureHeight, Bitmap.Config.ARGB_8888)
-                }
-                val fullBitmap = reusableFullFrameBitmap!!
-
-                val completable = CompletableDeferred<Int>()
-                handler.post {
-                    try {
-                        if (surface.isValid) {
-                            PixelCopy.request(surface, null, fullBitmap, { result -> completable.complete(result) }, handler)
-                        } else {
-                            completable.complete(PixelCopy.ERROR_UNKNOWN)
-                        }
-                    } catch (e: Exception) {
-                        completable.completeExceptionally(e)
-                    }
-                }
-
-                if (try { completable.await() } catch (e: Exception) { -1 } == PixelCopy.SUCCESS) {
-                    isDetectionProcessing.set(true)
-                    
-                    serviceScope.launch(Dispatchers.Default) {
-                        var roiSnapshot: Bitmap? = null
-                        try {
-                            val left = (captureWidth * WipeoutDetector.ROI_LEFT_PCT).toInt()
-                            val top = (captureHeight * WipeoutDetector.ROI_TOP_PCT).toInt()
-                            val right = (captureWidth * WipeoutDetector.ROI_RIGHT_PCT).toInt()
-                            val bottom = (captureHeight * WipeoutDetector.ROI_BOTTOM_PCT).toInt()
-                            
-                            val targetW = (right - left).coerceAtLeast(1)
-                            val targetH = (bottom - top).coerceAtLeast(1)
-
-                            roiSnapshot = Bitmap.createBitmap(fullBitmap, left, top, targetW, targetH)
-                            val result = WipeoutDetector.detectWipeout(roiSnapshot)
-                            
-                            // 💡 FIFOバッファにスコアを蓄積 (直近20フレーム)
-                            synchronized(scoreHistory) {
-                                scoreHistory.addLast(result.scores)
-                                if (scoreHistory.size > 20) {
-                                    scoreHistory.removeFirst()
-                                }
-                            }
-
-                            // 💡 履歴の中から各文字ごとの最大スコアを算出
-                            val maxScores = List(7) { charIdx ->
-                                synchronized(scoreHistory) {
-                                    scoreHistory.maxOfOrNull { it[charIdx] } ?: 0f
-                                }
-                            }
-
-                            // 💡 最大スコアを使って最終判定
-                            if (WipeoutDetector.evaluateTripleCheck(maxScores)) {
-                                val templates = WipeoutDetector.getAllTemplates()
-                                val detail = templates.indices.joinToString(", ") { i ->
-                                    val name = templates[i].charName
-                                    val score = maxScores[i]
-                                    "$name: ${String.format(java.util.Locale.US, "%.2f", score)}"
-                                }
-                                Log.i("ZZZGlip_Detection", "!!! WIPEOUT DETECTED (FIFO MAX) !!! Details: [$detail]")
-                                
-                                handleWipeoutDetected()
-                                saveEnhancedDiagnosticImage(roiSnapshot, result, "hit")
-                                // HITした場合は履歴をリセットして重複検知を抑制
-                                synchronized(scoreHistory) { scoreHistory.clear() }
-                            } else {
-                                val countOver75 = maxScores.count { it >= 0.75f }
-                                val countOver70 = maxScores.count { it >= 0.70f }
-                                if (countOver75 >= 1 || countOver70 >= 2) {
-                                    saveEnhancedDiagnosticImage(roiSnapshot, result, "near")
-                                }
-                            }
-                        } catch (e: Exception) {
-                            Log.e("ZZZGlip_Detection", "Analysis error", e)
-                        } finally {
-                            roiSnapshot?.recycle()
-                            isDetectionProcessing.set(false)
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("ZZZGlip_Detection", "Detection loop error", e)
-            }
-        }
-        
-        reusableFullFrameBitmap?.recycle()
-        reusableFullFrameBitmap = null
-        reusableDetectionBitmap?.recycle()
-        reusableDetectionBitmap = null
     }
 
     private fun handleWipeoutDetected() {
         if (isAutoSavePending.getAndSet(true)) return
-        serviceScope.launch(Dispatchers.Main) {
-            floatingView?.let { view ->
-                view.findViewById<android.widget.TextView>(R.id.btn_save)?.text = "WO!"
-                view.alpha = 0.4f
-            }
-        }
+        floatingViewManager?.setSavingMode(true, isWipeout = true)
+        
         serviceScope.launch(Dispatchers.Default) {
             try {
-                delay(5000)
-                saveBufferInternal(10000L, isAutoSave = true)
+                delay(Constants.Intervals.AUTO_SAVE_WAIT_MS)
+                saveBufferInternal(Constants.Intervals.CLIP_DURATION_MS, isAutoSave = true)
             } finally {
                 isAutoSavePending.set(false)
             }
@@ -1019,13 +580,36 @@ class ScreenRecorderService : Service() {
     }
 
     private fun stopEncoderOnly() {
-        virtualDisplay?.surface = null; try { videoEncoder?.stop() } catch (e: Exception) {} finally { videoEncoder?.release(); videoEncoder = null }; try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }; videoEncoderSurface?.release(); videoEncoderSurface = null 
+        virtualDisplay?.surface = null
+        videoEncoderController.stop()
+        try { audioEncoder?.stop() } catch (e: Exception) {} finally { audioEncoder?.release(); audioEncoder = null }
     }
+
     private fun stopRecording() { 
-        val was = isRecording.getAndSet(false); if (!was && mediaProjection == null) return; audioJob?.cancel(); audioJob = null; detectionJob?.cancel(); detectionJob = null; stopEncoderOnly(); virtualDisplay?.release(); virtualDisplay = null; reusableFullFrameBitmap?.recycle(); reusableFullFrameBitmap = null; reusableDetectionBitmap?.recycle(); reusableDetectionBitmap = null; synchronized(scoreHistory) { scoreHistory.clear() }; audioRecord?.let { try { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() } catch (e: Exception) {} ; try { it.release() } catch (e: Exception) {} }; audioRecord = null; synchronized(muxerLock) { try { if (muxerStarted) { if (samplesWrittenToCurrentMuxer) muxer?.stop(); muxer?.release() } } catch (e: Exception) {} ; muxer = null; muxerStarted = false; samplesWrittenToCurrentMuxer = false }; mediaProjection?.stop(); mediaProjection = null; segments.forEach { if (it.exists()) it.delete() }; segments.clear(); handler.post { floatingView?.let { try { windowManager.removeView(it) } catch (e: Exception) {} }; floatingView = null }
+        val was = isRecording.getAndSet(false)
+        if (!was && mediaProjection == null) return
+        
+        audioJob?.cancel()
+        audioJob = null
+        detectionController?.stop()
+        
+        stopEncoderOnly()
+        virtualDisplay?.release()
+        virtualDisplay = null
+        
+        audioRecorderController?.stop()
+        
+        muxerManager?.release()
+        mediaProjection?.stop()
+        mediaProjection = null
+        
+        muxerManager?.segments?.forEach { if (it.exists()) it.delete() }
+        muxerManager?.segments?.clear()
+        floatingViewManager?.hide()
     }
+
     private fun createNotificationChannel() { val chan = NotificationChannel(CHANNEL_ID, "ZZZGlip Recorder", NotificationManager.IMPORTANCE_LOW); val manager = getSystemService(NotificationManager::class.java); manager.createNotificationChannel(chan) }
     private fun updateNotification() { val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager; manager.notify(NOTIFICATION_ID, createNotification(currentBufferTime)) }
-    private fun createNotification(time: String): Notification { val stopPI = PendingIntent.getService(this, 0, Intent(this, ScreenRecorderService::class.java).apply { action = "STOP_SERVICE" }, PendingIntent.FLAG_IMMUTABLE); val listPI = PendingIntent.getActivity(this, 1, Intent(this, TimeSelectionActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT); return NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle("ZZZGlip Recording").setContentText("Buffer: $time").setSmallIcon(android.R.drawable.ic_media_play).setOngoing(true).addAction(0, "Stop", stopPI).addAction(0, "Time List", listPI).build() }
+    private fun createNotification(time: String): Notification { val stopPI = PendingIntent.getService(this, 0, Intent(this, ScreenRecorderService::class.java).apply { action = Constants.Actions.STOP_SERVICE }, PendingIntent.FLAG_IMMUTABLE); val listPI = PendingIntent.getActivity(this, 1, Intent(this, TimeSelectionActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT); return NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle("ZZZGlip Recording").setContentText("Buffer: $time").setSmallIcon(android.R.drawable.ic_media_play).setOngoing(true).addAction(0, "Stop", stopPI).addAction(0, "Time List", listPI).build() }
     override fun onDestroy() { super.onDestroy(); stopRecording(); serviceJob.cancel() }
 }
