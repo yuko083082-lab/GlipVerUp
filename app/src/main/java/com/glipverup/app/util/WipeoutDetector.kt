@@ -87,7 +87,7 @@ object WipeoutDetector {
         000000
     """)
 
-    // P: 44px(中心), 16px(幅)
+    // P: 44px(中心), 14px(幅)
     private val TEMPLATE_P = buildTemplate("P", 14, 44, """
         00000000000000
         00111111111000
@@ -167,7 +167,7 @@ object WipeoutDetector {
         00000000000000
     """)
 
-    // T: 96px(中心), 15px(幅)
+    // T: 96px(中心), 11px(幅)
     private val TEMPLATE_T = buildTemplate("T", 11, 96, """
         00000000000
         11111111111

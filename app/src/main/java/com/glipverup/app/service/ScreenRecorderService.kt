@@ -408,7 +408,19 @@ class ScreenRecorderService : Service() {
             val file = File(cacheDir, "seg_${System.currentTimeMillis()}_$suffix.mp4")
             segments.add(file)
 
-            while (segments.size > 20) {
+            // 💡 設定時間に応じた上限値を計算 (設定分 * 1.2 を切り上げ)
+            val bufferMinutes = when(currentBufferTime) {
+                "6 min" -> 6
+                "5 min" -> 5
+                "3 min" -> 3
+                "1 min" -> 1
+                "30 sec" -> 1 // 最低 1
+                "15 sec" -> 1 // 最低 1
+                else -> 1
+            }
+            val maxSegments = kotlin.math.ceil(bufferMinutes * 1.2).toInt().coerceAtLeast(1)
+
+            while (segments.size > maxSegments) {
                 val oldest = segments.pollFirst()
                 if (oldest != null && oldest.exists()) oldest.delete()
             }
