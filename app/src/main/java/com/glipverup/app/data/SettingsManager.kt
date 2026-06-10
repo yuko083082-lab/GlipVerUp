@@ -20,6 +20,7 @@ class SettingsManager(private val context: Context) {
         val FLOATING_X_KEY = intPreferencesKey("floating_x")
         val FLOATING_Y_KEY = intPreferencesKey("floating_y")
         val WIPEOUT_DETECTION_KEY = booleanPreferencesKey("wipeout_detection")
+        val WIPEOUT_AUTO_DELETE_KEY = booleanPreferencesKey("wipeout_auto_delete")
     }
 
     val floatingXFlow: Flow<Int?> = context.dataStore.data.map { it[FLOATING_X_KEY] }
@@ -29,9 +30,19 @@ class SettingsManager(private val context: Context) {
         preferences[WIPEOUT_DETECTION_KEY] ?: false
     }
 
+    val wipeoutAutoDeleteFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[WIPEOUT_AUTO_DELETE_KEY] ?: false
+    }
+
     suspend fun updateWipeoutDetection(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[WIPEOUT_DETECTION_KEY] = enabled
+        }
+    }
+
+    suspend fun updateWipeoutAutoDelete(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[WIPEOUT_AUTO_DELETE_KEY] = enabled
         }
     }
 

@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                     composable("main") {
                         MainScreen(
                             isRecording = viewModel.isRecording,
+                            showDeleteMessage = viewModel.showDeleteMessage,
                             onToggleRecording = {
                                 if (!viewModel.isRecording) {
                                     startRecordingProcess()
@@ -163,6 +164,16 @@ class MainActivity : ComponentActivity() {
             overlayLauncher.launch(PermissionHandler.getOverlayPermissionIntent(this))
             return
         }
+        
+        // 💡 古いファイルの自動削除チェック（並列実行）
+        mainViewModel?.let { vm ->
+            lifecycleScope.launch {
+                if (vm.isWipeoutAutoDeleteEnabled.first()) {
+                    vm.cleanOldWipeoutFilesAsync()
+                }
+            }
+        }
+
         if (!PermissionHandler.hasAudioPermission(this)) {
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 103)
         } else {

@@ -20,6 +20,10 @@ class MuxerManager(private val cacheDir: File) {
         private set
     var samplesWrittenToCurrentMuxer = false
         private set
+    var videoTrackAdded = false
+        private set
+    var audioTrackAdded = false
+        private set
 
     val segments = ConcurrentLinkedDeque<File>()
     
@@ -52,12 +56,20 @@ class MuxerManager(private val cacheDir: File) {
                 muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
                 videoTrackIndex = -1
                 audioTrackIndex = -1
+                videoTrackAdded = false
+                audioTrackAdded = false
                 muxerStarted = false
                 samplesWrittenToCurrentMuxer = false
                 segmentFirstPtsUs = -1L
 
-                persistedVideoFormat?.let { videoTrackIndex = muxer?.addTrack(it) ?: -1 }
-                persistedAudioFormat?.let { audioTrackIndex = muxer?.addTrack(it) ?: -1 }
+                persistedVideoFormat?.let { 
+                    videoTrackIndex = muxer?.addTrack(it) ?: -1 
+                    if (videoTrackIndex >= 0) videoTrackAdded = true
+                }
+                persistedAudioFormat?.let { 
+                    audioTrackIndex = muxer?.addTrack(it) ?: -1 
+                    if (audioTrackIndex >= 0) audioTrackAdded = true
+                }
                 checkMuxerStart()
                 onComplete()
             } catch (e: Exception) {
@@ -67,7 +79,7 @@ class MuxerManager(private val cacheDir: File) {
     }
 
     fun checkMuxerStart() {
-        if (!muxerStarted && videoTrackIndex >= 0 && audioTrackIndex >= 0) {
+        if (!muxerStarted && videoTrackAdded && audioTrackAdded) {
             try {
                 muxer?.start()
                 muxerStarted = true
@@ -82,9 +94,11 @@ class MuxerManager(private val cacheDir: File) {
             val index = muxer?.addTrack(format) ?: -1
             if (isVideo) {
                 videoTrackIndex = index
+                videoTrackAdded = (index >= 0)
                 persistedVideoFormat = format
             } else {
                 audioTrackIndex = index
+                audioTrackAdded = (index >= 0)
                 persistedAudioFormat = format
             }
             checkMuxerStart()
@@ -109,7 +123,13 @@ class MuxerManager(private val cacheDir: File) {
         synchronized(muxerLock) {
             try {
                 if (muxerStarted) {
-                    if (samplesWrittenToCurrentMuxer) muxer?.stop()
+                    if (samplesWrittenToCurrentMuxer) {
+                        try {
+                            muxer?.stop()
+                        } catch (e: Exception) {
+                            Log.w("MuxerManager", "Error stopping muxer during release", e)
+                        }
+                    }
                 }
             } catch (e: Exception) { }
             try { muxer?.release() } catch (e: Exception) { }
@@ -118,6 +138,8 @@ class MuxerManager(private val cacheDir: File) {
             samplesWrittenToCurrentMuxer = false
             videoTrackIndex = -1
             audioTrackIndex = -1
+            videoTrackAdded = false
+            audioTrackAdded = false
         }
     }
     

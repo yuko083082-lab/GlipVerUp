@@ -21,6 +21,7 @@ import com.glipverup.app.BuildConfig
 @Composable
 fun MainScreen(
     isRecording: Boolean,
+    showDeleteMessage: Boolean,
     onToggleRecording: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
@@ -54,6 +55,24 @@ fun MainScreen(
                     text = if (isRecording) "STOP" else "REC",
                     fontSize = 32.sp,
                     color = Color.White
+                )
+            }
+        }
+
+        // Delete Message Overlay
+        if (showDeleteMessage) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp)
+                    .padding(horizontal = 32.dp)
+                    .background(Color.Black.copy(alpha = 0.7f), shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    "1週間以上前の古いファイルを削除しています...",
+                    color = Color.White,
+                    fontSize = 14.sp
                 )
             }
         }

@@ -1,7 +1,9 @@
 package com.glipverup.app.util
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.util.Log
 
 object WipeoutDetector {
 
@@ -13,8 +15,11 @@ object WipeoutDetector {
 
     private const val CHAR_HEIGHT = 16
     
-    // 💡 探索範囲の定数（理想位置から±6px、合計12px幅）
+    // 💡 探索範囲の定数（隣の文字を拾わないよう ±6px に制限）
     private const val SCAN_RANGE = 12
+
+    // 💡 スケーリング計算の基準となるロゴ全幅
+    private const val REFERENCE_WIDTH = 102
 
     // 【仕様】1文字あたりの合格ライン（70%）
     private const val CHAR_MATCH_THRESHOLD = 0.70f
@@ -49,29 +54,30 @@ object WipeoutDetector {
     }
 
     // --- 文字幅と中心座標を個別に最適化した全7文字の型紙データ ---
-    
-    // W: 11px(中心), 23px(幅)
-    private val TEMPLATE_W = buildTemplate("W", 17, 11, """
-        00000000000000000
-        00001111000001111
-        00001111000011111
-        10001111100011111
-        10011111100111111
-        10111111101111111
-        11111111111111110
-        11111111111111100
-        11111110111111100
-        11111100111111000
-        11111100111111000
-        11111000011110000
-        11111000011110000
-        00000000000000000
-        00000000000000000
-        00000000000000000
+    // 💡 102px基準の理想的な中心X座標（連続したロゴに最適化）
+
+    // W: 11px(中心), 15px(幅)
+    private val TEMPLATE_W = buildTemplate("W", 15, 11, """
+        000000000000000
+        100011110001111
+        110011111001111
+        110111111011111
+        110111111011110
+        111111111111110
+        111111111111100
+        111110111111100
+        111110111111100
+        111100111111000
+        111100111111000
+        111000111110000
+        000000000000000
+        000000000000000
+        000000000000000
+        000000000000000
     """)
 
-    // I: 30px(中心), 6px(幅)
-    private val TEMPLATE_I = buildTemplate("I", 6, 30, """
+    // I: 25px(中心), 6px(幅)
+    private val TEMPLATE_I = buildTemplate("I", 6, 25, """
         000000
         011111
         011111
@@ -84,110 +90,110 @@ object WipeoutDetector {
         111110
         111100
         111100
-        111100
         000000
         000000
         000000
+        000000
     """)
 
-    // P: 44px(中心), 14px(幅)
-    private val TEMPLATE_P = buildTemplate("P", 14, 44, """
-        00000000000000
-        00111111111000
-        00111111111110
-        00111111111110
-        01111110111110
-        01111101111110
-        11111111111100
-        11111111111000
-        11111111110000
-        11111000000000
-        11111000000000
-        11111000000000
-        00000000000000
-        00000000000000
-        00000000000000
-        00000000000000
+    // P: 37px(中心), 12px(幅)
+    private val TEMPLATE_P = buildTemplate("P", 12, 37, """
+        000000000000
+        001111111110
+        001111111111
+        001111111111
+        011111011111
+        011111011111
+        111111111111
+        111111111110
+        111111111100
+        111100000000
+        111100000000
+        111100000000
+        000000000000
+        000000000000
+        000000000000
+        000000000000
     """)
 
-    // E: 56px(中心), 14px(幅)
-    private val TEMPLATE_E = buildTemplate("E", 14, 56, """
-        00000000000000
-        00111111111111
-        00111111111111
-        00111111111111
-        00111110000000
-        01111111111100
-        01111111111100
-        01111111111000
-        11111100000000
-        11111111111110
-        11111111111110
-        11111111111100
-        00000000000000
-        00000000000000
-        00000000000000
-        00000000000000
+    // E: 51px(中心), 10px(幅)
+    private val TEMPLATE_E = buildTemplate("E", 10, 51, """
+        0000000000
+        0111111111
+        0111111111
+        0111111111
+        0111110000
+        0111111110
+        0111111110
+        0111111110
+        1111100000
+        1111111110
+        1111111110
+        1111111110
+        0000000000
+        0000000000
+        0000000000
+        0000000000
     """)
 
-    // O: 71px(中心), 14px(幅)
-    private val TEMPLATE_O = buildTemplate("O", 14, 71, """
-        00000000000000
-        00011111111100
-        01111111111111
-        01111111111111
-        01111110111111
-        11111101111110
-        11111101111110
-        11111101111110
-        11111101111110
-        11111111111110
-        11111111111100
-        01111111111000
-        00000000000000
-        00000000000000
-        00000000000000
-        00000000000000
-    """)
-
-    // U: 87px(中心), 14px(幅)
-    private val TEMPLATE_U = buildTemplate("U", 14, 87, """
-        00000000000000
-        01111110111111
-        01111110111111
-        01111110111111
-        01111110111111
-        11111101111110
-        11111101111110
-        11111101111110
-        11111101111110
-        11111111111100
-        11111111111100
-        11111111111000
-        00000000000000
-        00000000000000
-        00000000000000
-        00000000000000
-    """)
-
-    // T: 96px(中心), 11px(幅)
-    private val TEMPLATE_T = buildTemplate("T", 11, 96, """
+    // O: 65px(中心), 11px(幅)
+    private val TEMPLATE_O = buildTemplate("O", 11, 65, """
         00000000000
+        00111111111
+        01111111111
         11111111111
+        11111101111
+        11111011111
+        11111011111
+        11111011111
+        11111011111
         11111111111
-        11111111111
-        00000111111
-        00001111111
-        00001111111
-        00001111110
-        00001111110
-        00011111100
-        00011111100
-        00011111100
+        11111111110
+        01111111100
         00000000000
         00000000000
         00000000000
         00000000000
+    """)
+
+    // U: 80px(中心), 12px(幅)
+    private val TEMPLATE_U = buildTemplate("U", 12, 80, """
+        000000000000
+        011111011111
+        011111011111
+        011111011111
+        011111011111
+        011110111111
+        011110111111
+        011110111110
+        111110111110
+        111111111110
+        111111111110
+        011111111100
+        000000000000
+        000000000000
+        000000000000
+        000000000000
+    """)
+
+    // T: 94px(中心), 9px(幅)
+    private val TEMPLATE_T = buildTemplate("T", 9, 94, """
+        000000000
+        111111111
+        111111111
+        111111111
+        000111110
+        000111110
+        000111110
+        000111110
+        001111100
+        001111100
+        001111100
+        001111100
+        000000000
+        000000000
+        000000000
+        000000000
     """)
 
     private val ALL_TEMPLATES = arrayOf(
@@ -202,26 +208,48 @@ object WipeoutDetector {
         val binarizedBitmap: Bitmap? = null
     )
 
+    private var reusableScaledBitmap: Bitmap? = null
+    private var reusableBinarizedBitmap: Bitmap? = null
+    private var pixelArray: IntArray? = null
+    private val canvas = Canvas()
+
     fun detectWipeout(roiBitmap: Bitmap?): DetectionResult {
         if (roiBitmap == null || roiBitmap.height == 0) return DetectionResult(false, emptyList(), emptyList(), emptyList())
 
         try {
             // 💡 高さ 16px に合わせてアスペクト比を維持してスケーリング
             val scaledWidth = (roiBitmap.width * CHAR_HEIGHT) / roiBitmap.height
-            val scaledBitmap = Bitmap.createScaledBitmap(roiBitmap, scaledWidth, CHAR_HEIGHT, true)
+            
+            // Bitmap再利用ロジック
+            if (reusableScaledBitmap == null || reusableScaledBitmap!!.width != scaledWidth) {
+                reusableScaledBitmap?.recycle()
+                reusableScaledBitmap = Bitmap.createBitmap(scaledWidth, CHAR_HEIGHT, Bitmap.Config.ARGB_8888)
+            }
+            val scaledBitmap = reusableScaledBitmap!!
+            canvas.setBitmap(scaledBitmap)
+            canvas.drawBitmap(roiBitmap, null, android.graphics.Rect(0, 0, scaledWidth, CHAR_HEIGHT), null)
 
             // 💡 スケーリング後の画像を二値化してデバッグ用に保持
-            val binarized = Bitmap.createBitmap(scaledWidth, CHAR_HEIGHT, Bitmap.Config.ARGB_8888)
-            for (y in 0 until CHAR_HEIGHT) {
-                for (x in 0 until scaledWidth) {
-                    val color = scaledBitmap.getPixel(x, y)
-                    val r = Color.red(color)
-                    val g = Color.green(color)
-                    val b = Color.blue(color)
-                    val isBright = (r > 160 && g > 140 && b < 140)
-                    binarized.setPixel(x, y, if (isBright) Color.WHITE else Color.BLACK)
-                }
+            if (reusableBinarizedBitmap == null || reusableBinarizedBitmap!!.width != scaledWidth) {
+                reusableBinarizedBitmap?.recycle()
+                reusableBinarizedBitmap = Bitmap.createBitmap(scaledWidth, CHAR_HEIGHT, Bitmap.Config.ARGB_8888)
+                pixelArray = IntArray(scaledWidth * CHAR_HEIGHT)
             }
+            val binarized = reusableBinarizedBitmap!!
+            val pixels = pixelArray!!
+
+            // getPixelsによる高速一括取得
+            scaledBitmap.getPixels(pixels, 0, scaledWidth, 0, 0, scaledWidth, CHAR_HEIGHT)
+
+            for (i in pixels.indices) {
+                val color = pixels[i]
+                val r = (color shr 16) and 0xFF
+                val g = (color shr 8) and 0xFF
+                val b = color and 0xFF
+                val isBright = (r > 160 && g > 140 && b < 140)
+                pixels[i] = if (isBright) Color.WHITE else Color.BLACK
+            }
+            binarized.setPixels(pixels, 0, scaledWidth, 0, 0, scaledWidth, CHAR_HEIGHT)
 
             val charScores = FloatArray(ALL_TEMPLATES.size)
             val charBestX = IntArray(ALL_TEMPLATES.size)
@@ -230,11 +258,11 @@ object WipeoutDetector {
             for (i in ALL_TEMPLATES.indices) {
                 val template = ALL_TEMPLATES[i]
                 
-                // 102px基準での「文字の左端」を算出
-                val idealLeft102 = template.idealCenterX - (template.width / 2)
+                // REFERENCE_WIDTH基準での「文字の左端」を算出
+                val idealLeftRef = template.idealCenterX - (template.width / 2)
                 
-                // 実際のscaledWidthに合わせた開始位置を計算し、バッファとして -(SCAN_RANGE / 2)
-                val startX = ((idealLeft102 * scaledWidth) / 102) - (SCAN_RANGE / 2)
+                // 実際のscaledWidthに合わせた開始位置を計算
+                val startX = ((idealLeftRef * scaledWidth) / REFERENCE_WIDTH) - (SCAN_RANGE / 2)
                 
                 var bestScoreForThisChar = 0f
                 var bestXForThisChar = 0
@@ -259,16 +287,21 @@ object WipeoutDetector {
             }
 
             // 💡 FIFOバッファ側のロジックで判定するため、ここでは個別の「合格判定」のみを計算
-            // (Service側のスコア蓄積と整合性を取るため、最終判定はServiceに任せる)
+            // (Service側のスコア蓄計と整合性を取るため、最終判定はServiceに任せる)
             val matchedChars = ALL_TEMPLATES.indices.filter { charScores[it] >= CHAR_MATCH_THRESHOLD }.map { ALL_TEMPLATES[it].charName }
             val scoresList = charScores.toList()
             val xOffsets = charBestX.toList()
 
-            scaledBitmap.recycle()
-            return DetectionResult(false, matchedChars, scoresList, xOffsets, binarized)
+            // scaledBitmapは再利用フィールドなのでrecycleしない
+            // binarizedはDetectionResultで外部（Service等）に渡され、そこで保存に使用される可能性があるため、
+            // ここではコピーを渡すか、あるいはライフサイクル管理を慎重に行う必要がある。
+            // 呼び出し元のDetectionControllerで適切に処理されていることを前提に、ここではコピーを作成して返す。
+            val resultBinarized = Bitmap.createBitmap(binarized)
+            
+            return DetectionResult(false, matchedChars, scoresList, xOffsets, resultBinarized)
 
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("WipeoutDetector", "Detection error", e)
             return DetectionResult(false, emptyList(), emptyList(), emptyList())
         }
     }
@@ -295,12 +328,15 @@ object WipeoutDetector {
         var matchZeroCount = 0
         var totalZeroCount = 0
 
-        for (y in 0 until CHAR_HEIGHT) {
-            for (x in 0 until template.width) {
-                if (startX + x >= binarized.width) continue
+        val width = template.width
+        val height = CHAR_HEIGHT
+        val pixels = IntArray(width * height)
+        // 指定範囲のピクセルを一括取得
+        binarized.getPixels(pixels, 0, width, startX, 0, width, height)
 
-                val pixelColor = binarized.getPixel(startX + x, y)
-                // 二値化済みなのでColor.WHITEかどうかだけで判定
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val pixelColor = pixels[y * width + x]
                 val actualValue = if (pixelColor == Color.WHITE) 1 else 0
                 val templateValue = template.pixels[y][x]
 

@@ -1,5 +1,6 @@
 package com.glipverup.app.recorder
 
+import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
 import android.media.MediaCodec
@@ -7,6 +8,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.media.MediaMuxer
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.ParcelFileDescriptor
@@ -163,9 +165,14 @@ class RecordingFileManager(private val context: Context, private val cacheDir: F
     }
 
     fun createVideoFileDescriptor(fileName: String): ParcelFileDescriptor? {
+        return createVideoFileDescriptorWithPrefix("", fileName)
+    }
+
+    fun createVideoFileDescriptorWithPrefix(prefix: String, fileName: String): ParcelFileDescriptor? {
+        val finalName = if (prefix.isNotEmpty()) "${prefix}_$fileName" else fileName
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val contentValues = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Video.Media.DISPLAY_NAME, finalName)
                 put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
                 put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/ZZZGlip")
             }
@@ -174,8 +181,100 @@ class RecordingFileManager(private val context: Context, private val cacheDir: F
         } else {
             val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
             val appDir = File(dcimDir, "ZZZGlip").apply { if (!exists()) mkdirs() }
-            val outFile = File(appDir, fileName)
+            val outFile = File(appDir, finalName)
             ParcelFileDescriptor.open(outFile, ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_CREATE)
+        }
+    }
+
+    private fun getOldWipeoutFiles(): List<Uri> {
+        val list = mutableListOf<Uri>()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return list
+
+        val oneWeekAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
+        
+        // 動画ファイルの検索
+        val videoProjection = arrayOf(MediaStore.Video.Media._ID, MediaStore.Video.Media.DATE_ADDED)
+        val videoSelection = "${MediaStore.Video.Media.DISPLAY_NAME} LIKE 'WIPEOUT_%' AND ${MediaStore.Video.Media.DATE_ADDED} < ?"
+        val videoArgs = arrayOf((oneWeekAgo / 1000).toString())
+
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            videoProjection,
+            videoSelection,
+            videoArgs,
+            null
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumn)
+                list.add(ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id))
+            }
+        }
+
+        // 診断画像の検索
+        val imageProjection = arrayOf(MediaStore.Images.Media._ID)
+        val imageSelection = "${MediaStore.Images.Media.RELATIVE_PATH} LIKE '%ZZZGlip/diag%' AND ${MediaStore.Images.Media.DATE_ADDED} < ?"
+        val imageArgs = arrayOf((oneWeekAgo / 1000).toString())
+
+        context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            imageProjection,
+            imageSelection,
+            imageArgs,
+            null
+        )?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumn)
+                list.add(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id))
+            }
+        }
+
+        return list
+    }
+
+    private fun getOldWipeoutFilesLegacy(): List<File> {
+        val list = mutableListOf<File>()
+        val oneWeekAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
+        val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+        
+        // 動画
+        val appDir = File(dcimDir, "ZZZGlip")
+        if (appDir.exists()) {
+            appDir.listFiles { _, name -> name.startsWith("WIPEOUT_") }?.forEach {
+                if (it.lastModified() < oneWeekAgo) list.add(it)
+            }
+        }
+        
+        // 診断画像
+        val diagDir = File(appDir, "diag")
+        if (diagDir.exists()) {
+            diagDir.listFiles()?.forEach {
+                if (it.lastModified() < oneWeekAgo) list.add(it)
+            }
+        }
+        return list
+    }
+
+    fun hasOldWipeoutFiles(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getOldWipeoutFiles().isNotEmpty()
+        } else {
+            getOldWipeoutFilesLegacy().isNotEmpty()
+        }
+    }
+
+    fun deleteOldWipeoutFiles() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getOldWipeoutFiles().forEach { uri ->
+                try {
+                    context.contentResolver.delete(uri, null, null)
+                } catch (e: Exception) {
+                    Log.e("RecordingFileManager", "Failed to delete old file: $uri", e)
+                }
+            }
+        } else {
+            getOldWipeoutFilesLegacy().forEach { it.delete() }
         }
     }
 }

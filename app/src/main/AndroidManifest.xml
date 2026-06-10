@@ -27,7 +27,6 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:appCategory="game"
-        android:attributionTags="glip_recorder"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
         <meta-data

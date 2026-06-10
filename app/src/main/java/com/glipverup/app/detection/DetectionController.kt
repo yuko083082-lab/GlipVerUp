@@ -27,6 +27,7 @@ class DetectionController(
     private var detectionJob: Job? = null
     
     private var reusableFullFrameBitmap: Bitmap? = null
+    private val bitmapLock = Any()
 
     fun start(
         virtualDisplayProvider: () -> VirtualDisplay?,
@@ -52,11 +53,13 @@ class DetectionController(
                 if (!surface.isValid) continue
 
                 try {
-                    if (reusableFullFrameBitmap == null || reusableFullFrameBitmap!!.width != captureWidth || reusableFullFrameBitmap!!.height != captureHeight) {
-                        reusableFullFrameBitmap?.recycle()
-                        reusableFullFrameBitmap = Bitmap.createBitmap(captureWidth, captureHeight, Bitmap.Config.ARGB_8888)
+                    val fullBitmap = synchronized(bitmapLock) {
+                        if (reusableFullFrameBitmap == null || reusableFullFrameBitmap!!.width != captureWidth || reusableFullFrameBitmap!!.height != captureHeight) {
+                            reusableFullFrameBitmap?.recycle()
+                            reusableFullFrameBitmap = Bitmap.createBitmap(captureWidth, captureHeight, Bitmap.Config.ARGB_8888)
+                        }
+                        reusableFullFrameBitmap!!
                     }
-                    val fullBitmap = reusableFullFrameBitmap!!
 
                     val completable = CompletableDeferred<Int>()
                     handler.post {
@@ -94,7 +97,15 @@ class DetectionController(
                 val targetW = (right - left).coerceAtLeast(1)
                 val targetH = (bottom - top).coerceAtLeast(1)
 
-                roiSnapshot = Bitmap.createBitmap(fullBitmap, left, top, targetW, targetH)
+                // fullBitmap（reusableFullFrameBitmap）が他スレッドでrecycleされないようにロック
+                synchronized(bitmapLock) {
+                    if (!fullBitmap.isRecycled) {
+                        roiSnapshot = Bitmap.createBitmap(fullBitmap, left, top, targetW, targetH)
+                    }
+                }
+                
+                if (roiSnapshot == null) return@launch
+
                 val result = WipeoutDetector.detectWipeout(roiSnapshot)
                 
                 // 💡 SPEC: FIFOバッファにスコアを蓄積 (直近20フレーム)
@@ -150,7 +161,9 @@ class DetectionController(
         detectionJob?.cancel()
         detectionJob = null
         synchronized(scoreHistory) { scoreHistory.clear() }
-        reusableFullFrameBitmap?.recycle()
-        reusableFullFrameBitmap = null
+        synchronized(bitmapLock) {
+            reusableFullFrameBitmap?.recycle()
+            reusableFullFrameBitmap = null
+        }
     }
 }

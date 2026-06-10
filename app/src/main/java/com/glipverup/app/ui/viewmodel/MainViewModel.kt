@@ -36,6 +36,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isWipeoutEnabled: StateFlow<Boolean> = settingsManager.wipeoutDetectionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    val isWipeoutAutoDeleteEnabled: StateFlow<Boolean> = settingsManager.wipeoutAutoDeleteFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    var showDeleteMessage by mutableStateOf(false)
+        private set
+
     fun updateRecordingState(recording: Boolean) {
         isRecording = recording
     }
@@ -49,6 +55,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateWipeoutDetection(enabled: Boolean) {
         viewModelScope.launch {
             settingsManager.updateWipeoutDetection(enabled)
+        }
+    }
+
+    fun updateWipeoutAutoDelete(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.updateWipeoutAutoDelete(enabled)
+        }
+    }
+
+    fun cleanOldWipeoutFilesAsync() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val fileManager = com.glipverup.app.recorder.RecordingFileManager(getApplication(), getApplication<Application>().cacheDir)
+            if (fileManager.hasOldWipeoutFiles()) {
+                showDeleteMessage = true
+                fileManager.deleteOldWipeoutFiles()
+                kotlinx.coroutines.delay(1000)
+                showDeleteMessage = false
+            }
         }
     }
 

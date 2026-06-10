@@ -22,6 +22,7 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
     val bitrate by viewModel.bitrate.collectAsState()
     val bufferTime by viewModel.bufferTime.collectAsState()
     val isWipeoutEnabled by viewModel.isWipeoutEnabled.collectAsState()
+    val isWipeoutAutoDeleteEnabled by viewModel.isWipeoutAutoDeleteEnabled.collectAsState()
 
     Scaffold(
         topBar = {
@@ -65,6 +66,31 @@ fun SettingsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                     Switch(
                         checked = isWipeoutEnabled,
                         onCheckedChange = { viewModel.updateWipeoutDetection(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFE53935),
+                            checkedTrackColor = Color(0xFFE53935).copy(alpha = 0.5f)
+                        )
+                    )
+                }
+            }
+
+            // WIPEOUT Auto Delete Toggle
+            Surface(
+                onClick = { viewModel.updateWipeoutAutoDelete(!isWipeoutAutoDeleteEnabled) },
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("WIPEOUT動画の自動削除", color = Color.White, fontSize = 16.sp)
+                        Text("1週間以上前のファイルを録画時に自動削除します", color = Color.Gray, fontSize = 12.sp)
+                    }
+                    Switch(
+                        checked = isWipeoutAutoDeleteEnabled,
+                        onCheckedChange = { viewModel.updateWipeoutAutoDelete(it) },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color(0xFFE53935),
                             checkedTrackColor = Color(0xFFE53935).copy(alpha = 0.5f)
