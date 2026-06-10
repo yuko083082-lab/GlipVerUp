@@ -518,32 +518,86 @@ class ScreenRecorderService : Service() {
         val binarized = result.binarizedBitmap ?: return
         val templates = WipeoutDetector.getAllTemplates()
         
+        // 💡 4段構成 (1:元画像, 2:二値化, 3:テンプレート配置, 4:差分マップ)
         val combinedWidth = roiBitmap.width
-        val combinedHeight = roiBitmap.height * 3 + 20
+        val combinedHeight = roiBitmap.height * 4 + 20 // 5px * 4隙間
         val combined = Bitmap.createBitmap(combinedWidth, combinedHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(combined)
         val paint = Paint()
 
+        // 1段目: ROI元画像
         canvas.drawBitmap(roiBitmap, 0f, 0f, paint)
         
+        // 2段目: 二値化画像
         val binarizedScaled = Bitmap.createScaledBitmap(binarized, combinedWidth, roiBitmap.height, false)
         canvas.drawBitmap(binarizedScaled, 0f, roiBitmap.height.toFloat() + 5, paint)
         
-        val diffLayer = Bitmap.createBitmap(binarized.width, binarized.height, Bitmap.Config.ARGB_8888)
-        val diffCanvas = Canvas(diffLayer)
+        // 3段目: テンプレート配置画像 (文字ごとに色分け、重なりは加算)
+        val templateLayer = Bitmap.createBitmap(binarized.width, binarized.height, Bitmap.Config.ARGB_8888)
+        val colors = intArrayOf(
+            0xFFFF0000.toInt(), // W: 赤
+            0xFF00FF00.toInt(), // I: 緑
+            0xFF0000FF.toInt(), // P: 青
+            0xFFFFFF00.toInt(), // E: 黄
+            0xFFFF00FF.toInt(), // O: 紫
+            0xFF00FFFF.toInt(), // U: 水
+            0xFFFFFFFF.toInt()  // T: 白
+        )
         
         for (i in templates.indices) {
+            val template = templates[i]
             val bestX = result.bestXOffsets.getOrNull(i) ?: continue
+            val score = result.scores.getOrNull(i) ?: 0f
+            
+            // 💡 スコアが低い(0.5未満)テンプレートはノイズとして描画しない
+            if (score < 0.5f) continue
+
+            val charColor = colors[i % colors.size]
+            
+            for (ty in 0 until template.pixels.size) {
+                for (tx in 0 until template.width) {
+                    if (template.pixels[ty][tx] == 1) {
+                        val targetX = bestX + tx
+                        if (targetX >= 0 && targetX < templateLayer.width) {
+                            val existingColor = templateLayer.getPixel(targetX, ty)
+                            // 加算合成（ARGBを単純に足してクリップ）
+                            val r = (android.graphics.Color.red(existingColor) + android.graphics.Color.red(charColor)).coerceAtMost(255)
+                            val g = (android.graphics.Color.green(existingColor) + android.graphics.Color.green(charColor)).coerceAtMost(255)
+                            val b = (android.graphics.Color.blue(existingColor) + android.graphics.Color.blue(charColor)).coerceAtMost(255)
+                            templateLayer.setPixel(targetX, ty, android.graphics.Color.rgb(r, g, b))
+                        }
+                    }
+                }
+            }
+        }
+        val templateScaled = Bitmap.createScaledBitmap(templateLayer, combinedWidth, roiBitmap.height, false)
+        canvas.drawBitmap(templateScaled, 0f, (roiBitmap.height * 2).toFloat() + 10, paint)
+
+        // 4段目: 差分マップ
+        val diffLayer = Bitmap.createBitmap(binarized.width, binarized.height, Bitmap.Config.ARGB_8888)
+        val diffCanvas = Canvas(diffLayer)
+        for (i in templates.indices) {
+            val bestX = result.bestXOffsets.getOrNull(i) ?: continue
+            val score = result.scores.getOrNull(i) ?: 0f
+            
+            // 💡 スコアが低いものは差分マップにも表示しない
+            if (score < 0.5f) continue
+
             val diffMap = WipeoutDetector.generateDiffMap(binarized, templates[i], bestX)
             diffCanvas.drawBitmap(diffMap, bestX.toFloat(), 0f, paint)
             diffMap.recycle()
         }
-        
         val diffScaled = Bitmap.createScaledBitmap(diffLayer, combinedWidth, roiBitmap.height, false)
-        canvas.drawBitmap(diffScaled, 0f, (roiBitmap.height * 2).toFloat() + 10, paint)
+        canvas.drawBitmap(diffScaled, 0f, (roiBitmap.height * 3).toFloat() + 15, paint)
         
+        // 解析用の二値化Bitmapはここでリサイクル（メモリ解放）
+        binarized.recycle()
+        
+        templateLayer.recycle()
         diffLayer.recycle()
         binarizedScaled.recycle()
+        templateScaled.recycle()
+        diffScaled.recycle()
 
         serviceScope.launch(Dispatchers.IO) {
             try {

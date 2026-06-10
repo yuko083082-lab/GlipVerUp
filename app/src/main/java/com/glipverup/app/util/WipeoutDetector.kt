@@ -12,6 +12,9 @@ object WipeoutDetector {
     const val ROI_BOTTOM_PCT = 0.70f
 
     private const val CHAR_HEIGHT = 16
+    
+    // 💡 探索範囲の定数（理想位置から±6px、合計12px幅）
+    private const val SCAN_RANGE = 12
 
     // 【仕様】1文字あたりの合格ライン（70%）
     private const val CHAR_MATCH_THRESHOLD = 0.70f
@@ -50,8 +53,8 @@ object WipeoutDetector {
     // W: 11px(中心), 23px(幅)
     private val TEMPLATE_W = buildTemplate("W", 17, 11, """
         00000000000000000
-        10000111100001111
-        10001111100011111
+        00001111000001111
+        00001111000011111
         10001111100011111
         10011111100111111
         10111111101111111
@@ -60,8 +63,8 @@ object WipeoutDetector {
         11111110111111100
         11111100111111000
         11111100111111000
-        11111000111110000
-        11111000111110000
+        11111000011110000
+        11111000011110000
         00000000000000000
         00000000000000000
         00000000000000000
@@ -101,8 +104,8 @@ object WipeoutDetector {
         11111000000000
         11111000000000
         11111000000000
-        11110000000000
-        11110000000000
+        00000000000000
+        00000000000000
         00000000000000
         00000000000000
     """)
@@ -112,15 +115,15 @@ object WipeoutDetector {
         00000000000000
         00111111111111
         00111111111111
-        01111111111111
-        01111100000000
+        00111111111111
+        00111110000000
         01111111111100
-        11111111111100
-        11111111111000
+        01111111111100
+        01111111111000
         11111100000000
-        11111111111111
-        11111111111111
-        11111111111111
+        11111111111110
+        11111111111110
+        11111111111100
         00000000000000
         00000000000000
         00000000000000
@@ -130,18 +133,18 @@ object WipeoutDetector {
     // O: 71px(中心), 14px(幅)
     private val TEMPLATE_O = buildTemplate("O", 14, 71, """
         00000000000000
-        00111111111100
-        01111111111110
-        11111111111111
-        11111110111111
-        11111101111111
-        11111101111111
-        11111101111111
-        11111101111111
-        11111101111111
-        11111111111111
-        01111111111110
-        00111111111100
+        00011111111100
+        01111111111111
+        01111111111111
+        01111110111111
+        11111101111110
+        11111101111110
+        11111101111110
+        11111101111110
+        11111111111110
+        11111111111100
+        01111111111000
+        00000000000000
         00000000000000
         00000000000000
         00000000000000
@@ -158,9 +161,9 @@ object WipeoutDetector {
         11111101111110
         11111101111110
         11111101111110
-        11111111111110
-        11111111111110
-        01111111111100
+        11111111111100
+        11111111111100
+        11111111111000
         00000000000000
         00000000000000
         00000000000000
@@ -173,13 +176,13 @@ object WipeoutDetector {
         11111111111
         11111111111
         11111111111
+        00000111111
         00001111111
         00001111111
-        00001111111
         00001111110
         00001111110
-        00001111110
-        00001111110
+        00011111100
+        00011111100
         00011111100
         00000000000
         00000000000
@@ -230,17 +233,19 @@ object WipeoutDetector {
                 // 102px基準での「文字の左端」を算出
                 val idealLeft102 = template.idealCenterX - (template.width / 2)
                 
-                // 実際のscaledWidthに合わせた開始位置を計算し、バッファとして-10px
-                val startX = ((idealLeft102 * scaledWidth) / 102) - 10
+                // 実際のscaledWidthに合わせた開始位置を計算し、バッファとして -(SCAN_RANGE / 2)
+                val startX = ((idealLeft102 * scaledWidth) / 102) - (SCAN_RANGE / 2)
                 
                 var bestScoreForThisChar = 0f
                 var bestXForThisChar = 0
                 
-                // 💡 【重要】必ず20px分をフルスキャンして最高スコアを探す
+                // 💡 【重要】必ずSCAN_RANGE分をフルスキャンして最高スコアを探す
                 // 💡 【修正】各文字は自身のテンプレートのみを、自身の担当範囲内だけで探す
-                for (offset in 0..20) {
+                for (offset in 0..SCAN_RANGE) {
                     val currentX = startX + offset
-                    if (currentX < 0 || currentX + template.width > scaledWidth) continue
+                    // 💡 【改善】マイナスの間はスルー（右側にスキャン範囲がずれるのを防ぐ）
+                    if (currentX < 0) continue
+                    if (currentX + template.width > scaledWidth) break
                     
                     val matchRatio = checkCharMatch(binarized, template, currentX)
                     
@@ -276,13 +281,12 @@ object WipeoutDetector {
         
         val countOver80 = scores.count { it >= 0.80f }
         val countOver75 = scores.count { it >= 0.75f }
-        val countOver70 = scores.count { it >= 0.70f }
         val minScore = scores.minOrNull() ?: 0f
 
-        // 条件1: 80%以上が1文字以上 OR 75%以上が2文字以上
-        // 条件2: 70%以上が3文字以上
-        // 条件3: 全7文字が50%以上
-        return ((countOver80 >= 1) || (countOver75 >= 2)) && (countOver70 >= 3) && (minScore >= 0.50f)
+        // 条件1: 80%以上が2文字以上
+        // 条件2: 75%以上が3文字以上
+        // 条件3: 全7文字が60%以上
+        return (countOver80 >= 2) && (countOver75 >= 3) && (minScore >= 0.60f)
     }
 
     private fun checkCharMatch(binarized: Bitmap, template: CharTemplate, startX: Int): Float {

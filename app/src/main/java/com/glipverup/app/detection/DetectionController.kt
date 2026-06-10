@@ -132,6 +132,9 @@ class DetectionController(
                     val countOver70 = maxScores.count { it >= 0.70f }
                     if (countOver75 >= 1 || countOver70 >= 2) {
                         onNearDetected(roiSnapshot, result)
+                    } else {
+                        // 診断画像保存に回さない場合はここでリサイクル
+                        result.binarizedBitmap?.recycle()
                     }
                 }
             } catch (e: Exception) {
