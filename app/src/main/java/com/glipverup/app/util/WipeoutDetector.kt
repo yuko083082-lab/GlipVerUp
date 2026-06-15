@@ -15,8 +15,8 @@ object WipeoutDetector {
 
     private const val CHAR_HEIGHT = 16
     
-    // 💡 探索範囲の定数（隣の文字を拾わないよう ±6px に制限）
-    private const val SCAN_RANGE = 12
+    // 💡 探索範囲の定数（隣の文字を拾わないよう ±3px に制限）
+    private const val SCAN_RANGE = 6
 
     // 💡 スケーリング計算の基準となるロゴ全幅
     private const val REFERENCE_WIDTH = 102
@@ -255,6 +255,9 @@ object WipeoutDetector {
             val charBestX = IntArray(ALL_TEMPLATES.size)
 
             // 💡 102px基準の理想位置から、個別に探索範囲を絞って精密スキャン
+            // 💡 [改善] 文字が重ならないよう、直前の文字の確定位置を基準に探索を開始する
+            var lastBestX = -1
+
             for (i in ALL_TEMPLATES.indices) {
                 val template = ALL_TEMPLATES[i]
                 
@@ -262,13 +265,18 @@ object WipeoutDetector {
                 val idealLeftRef = template.idealCenterX - (template.width / 2)
                 
                 // 実際のscaledWidthに合わせた開始位置を計算
-                val startX = ((idealLeftRef * scaledWidth) / REFERENCE_WIDTH) - (SCAN_RANGE / 2)
+                var startX = ((idealLeftRef * scaledWidth) / REFERENCE_WIDTH) - (SCAN_RANGE / 2)
                 
+                // 💡 [順序制約] 直前の文字の左端よりは必ず右側から探し始める
+                // これにより、E, O, U などが同じ明るい塊に吸着して重なるのを防ぐ
+                if (startX <= lastBestX) {
+                    startX = lastBestX + 1
+                }
+
                 var bestScoreForThisChar = 0f
-                var bestXForThisChar = 0
+                var bestXForThisChar = startX
                 
                 // 💡 【重要】必ずSCAN_RANGE分をフルスキャンして最高スコアを探す
-                // 💡 【修正】各文字は自身のテンプレートのみを、自身の担当範囲内だけで探す
                 for (offset in 0..SCAN_RANGE) {
                     val currentX = startX + offset
                     // 💡 【改善】マイナスの間はスルー（右側にスキャン範囲がずれるのを防ぐ）
@@ -284,6 +292,7 @@ object WipeoutDetector {
                 }
                 charScores[i] = bestScoreForThisChar
                 charBestX[i] = bestXForThisChar
+                lastBestX = bestXForThisChar
             }
 
             // 💡 FIFOバッファ側のロジックで判定するため、ここでは個別の「合格判定」のみを計算
@@ -307,7 +316,7 @@ object WipeoutDetector {
     }
 
     /**
-     * 💡 [新規] スコアリスト（各文字の最大値）を受け取り、トリプルチェック判定を行う
+     * 💡 スコアリスト（各文字の最大値）を受け取り、トリプルチェック判定を行う
      */
     fun evaluateTripleCheck(scores: List<Float>): Boolean {
         if (scores.size < ALL_TEMPLATES.size) return false

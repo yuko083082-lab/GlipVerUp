@@ -35,13 +35,28 @@ class MuxerManager(private val cacheDir: File) {
     var segmentFirstPtsUs = -1L
 
     fun rotateMuxer(isLandscape: Boolean, maxSegments: Int, onComplete: () -> Unit) {
+        val startTime = System.currentTimeMillis()
+        Log.d("MuxerManager", "rotateMuxer: START at $startTime")
         synchronized(muxerLock) {
-            try {
-                if (muxerStarted && samplesWrittenToCurrentMuxer) {
-                    try { muxer?.stop() } catch (e: Exception) { }
-                }
-                muxer?.release()
-            } catch (e: Exception) { }
+            val oldMuxer = muxer
+            val wasStarted = muxerStarted
+            val hadSamples = samplesWrittenToCurrentMuxer
+            
+            // 💡 非同期で停止・解放処理を行う
+            if (oldMuxer != null) {
+                Thread {
+                    val stopStart = System.currentTimeMillis()
+                    try {
+                        if (wasStarted && hadSamples) {
+                            oldMuxer.stop()
+                        }
+                        oldMuxer.release()
+                    } catch (e: Exception) {
+                        Log.w("MuxerManager", "Async muxer release failed: ${e.message}")
+                    }
+                    Log.d("MuxerManager", "rotateMuxer: async muxer.stop/release took ${System.currentTimeMillis() - stopStart}ms")
+                }.start()
+            }
 
             val suffix = if (isLandscape) "L" else "P"
             val file = File(cacheDir, "seg_${System.currentTimeMillis()}_$suffix.mp4")
@@ -53,7 +68,10 @@ class MuxerManager(private val cacheDir: File) {
             }
 
             try {
+                val muxerStart = System.currentTimeMillis()
                 muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+                Log.d("MuxerManager", "rotateMuxer: new MediaMuxer took ${System.currentTimeMillis() - muxerStart}ms")
+
                 videoTrackIndex = -1
                 audioTrackIndex = -1
                 videoTrackAdded = false
@@ -76,6 +94,7 @@ class MuxerManager(private val cacheDir: File) {
                 Log.e("MuxerManager", "Failed to rotate muxer", e)
             }
         }
+        Log.d("MuxerManager", "rotateMuxer: END. Total took ${System.currentTimeMillis() - startTime}ms")
     }
 
     fun checkMuxerStart() {
@@ -123,18 +142,22 @@ class MuxerManager(private val cacheDir: File) {
         synchronized(muxerLock) {
             try {
                 if (muxerStarted) {
+                    muxerStarted = false // 先にフラグを落とす
                     if (samplesWrittenToCurrentMuxer) {
                         try {
                             muxer?.stop()
                         } catch (e: Exception) {
-                            Log.w("MuxerManager", "Error stopping muxer during release", e)
+                            Log.w("MuxerManager", "Error stopping muxer during release: ${e.message}")
                         }
                     }
                 }
             } catch (e: Exception) { }
-            try { muxer?.release() } catch (e: Exception) { }
+            try { 
+                muxer?.release() 
+            } catch (e: Exception) {
+                Log.w("MuxerManager", "Error releasing muxer: ${e.message}")
+            }
             muxer = null
-            muxerStarted = false
             samplesWrittenToCurrentMuxer = false
             videoTrackIndex = -1
             audioTrackIndex = -1

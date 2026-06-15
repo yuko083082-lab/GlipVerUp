@@ -2,9 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.glipverup.app">
 
-    <!-- 復旧: attribution タグは manifest 直下に置くのが正解 -->
-    <attribution android:tag="glip_recorder" android:label="@string/attribution_label" />
-
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
@@ -35,8 +32,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true"
-            android:attributionTags="glip_recorder">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -47,7 +43,6 @@
             android:name=".service.ScreenRecorderService"
             android:enabled="true"
             android:exported="false"
-            android:attributionTags="glip_recorder"
             android:foregroundServiceType="mediaProjection|microphone" />
 
         <activity

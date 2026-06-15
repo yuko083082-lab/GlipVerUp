@@ -46,20 +46,9 @@ class ScreenRecorderService : Service() {
          * 1 = WIPEOUT確定画像 (HIT)
          * 2 = 惜しい画像 (NEAR) も保存
          */
-        private const val DETECTION_LOG_LEVEL = 1
+        private const val DETECTION_LOG_LEVEL = 2
     }
 
-    override fun attachBaseContext(newBase: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            super.attachBaseContext(newBase.createAttributionContext("glip_recorder"))
-        } else {
-            super.attachBaseContext(newBase)
-        }
-    }
-
-    override fun getAttributionTag(): String {
-        return "glip_recorder"
-    }
 
     private lateinit var windowManager: WindowManager
     private lateinit var projectionManager: MediaProjectionManager
@@ -105,7 +94,7 @@ class ScreenRecorderService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("ZZZGlip", "Service.onCreate. Context tag: ${if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) this.attributionTag else "N/A"}")
+        Log.d("ZZZGlip", "Service.onCreate.")
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -360,6 +349,7 @@ class ScreenRecorderService : Service() {
         audioRecorderController?.startLoop(isRecording) { pendingRotationRestart }
 
         while (isRecording.get() && !pendingRotationRestart) {
+            var handledSomething = false
             val currentOrientation = resources.configuration.orientation
             if (currentOrientation != lastOrientation) {
                 pendingRotationRestart = true
@@ -368,49 +358,56 @@ class ScreenRecorderService : Service() {
             }
 
             if (System.currentTimeMillis() - lastMuxerRotationTimeMs > segmentDurationMs) {
-                rotateMuxerNextLoop = true
-                rotateMuxer()
-                lastMuxerRotationTimeMs = System.currentTimeMillis()
-                rotateMuxerNextLoop = false
+                if (!rotateMuxerNextLoop) {
+                    Log.d("ScreenRecorderService", "recordingLoop: Segment time reached. Setting rotateMuxerNextLoop = true")
+                    rotateMuxerNextLoop = true
+                }
             }
 
             videoEncoderController.encoder?.let { encoder ->
                 try {
-                    val outIdx = encoder.dequeueOutputBuffer(vBufferInfo, 1000)
-                    if (outIdx >= 0) {
-                        val buffer = encoder.getOutputBuffer(outIdx)
-                        if (buffer != null) {
-                            val manager = muxerManager
-                            if (manager != null) {
-                                val nowUs = System.nanoTime() / 1000
-                                if (manager.videoTimelineOffsetUs == -1L) {
-                                    manager.videoTimelineOffsetUs = nowUs - vBufferInfo.presentationTimeUs
-                                }
-                                val absoluteVideoPts = vBufferInfo.presentationTimeUs + manager.videoTimelineOffsetUs
-
-                                if (rotateMuxerNextLoop && (vBufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0)) {
-                                    rotateMuxer()
-                                    lastMuxerRotationTimeMs = System.currentTimeMillis()
-                                    rotateMuxerNextLoop = false
-                                }
-
-                                if (manager.videoTrackIndex >= 0 && manager.muxerStarted) {
-                                    if (manager.segmentFirstPtsUs == -1L) {
-                                        manager.segmentFirstPtsUs = absoluteVideoPts
+                    while (isRecording.get()) {
+                        val outIdx = encoder.dequeueOutputBuffer(vBufferInfo, 0)
+                        if (outIdx >= 0) {
+                            handledSomething = true
+                            val buffer = encoder.getOutputBuffer(outIdx)
+                            if (buffer != null) {
+                                val manager = muxerManager
+                                if (manager != null) {
+                                    val nowUs = System.nanoTime() / 1000
+                                    if (manager.videoTimelineOffsetUs == -1L) {
+                                        manager.videoTimelineOffsetUs = nowUs - vBufferInfo.presentationTimeUs
                                     }
-                                    if ((vBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                                        val pts = absoluteVideoPts - manager.segmentFirstPtsUs
-                                        if (pts >= 0) {
-                                            vBufferInfo.presentationTimeUs = pts
-                                            manager.writeSampleData(manager.videoTrackIndex, buffer, vBufferInfo)
+                                    val absoluteVideoPts = vBufferInfo.presentationTimeUs + manager.videoTimelineOffsetUs
+
+                                    if (rotateMuxerNextLoop && (vBufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0)) {
+                                        Log.d("ScreenRecorderService", "recordingLoop: Keyframe detected. Executing rotateMuxer()")
+                                        rotateMuxer()
+                                        lastMuxerRotationTimeMs = System.currentTimeMillis()
+                                        rotateMuxerNextLoop = false
+                                    }
+
+                                    if (manager.videoTrackIndex >= 0 && manager.muxerStarted) {
+                                        if (manager.segmentFirstPtsUs == -1L) {
+                                            manager.segmentFirstPtsUs = absoluteVideoPts
+                                        }
+                                        if ((vBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                                            val pts = absoluteVideoPts - manager.segmentFirstPtsUs
+                                            if (pts >= 0) {
+                                                vBufferInfo.presentationTimeUs = pts
+                                                manager.writeSampleData(manager.videoTrackIndex, buffer, vBufferInfo)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            encoder.releaseOutputBuffer(outIdx, false)
+                        } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            handledSomething = true
+                            muxerManager?.addTrack(encoder.outputFormat, isVideo = true)
+                        } else {
+                            break
                         }
-                        encoder.releaseOutputBuffer(outIdx, false)
-                    } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        muxerManager?.addTrack(encoder.outputFormat, isVideo = true)
                     }
                 } catch (e: Exception) {
                     if (isRecording.get()) {
@@ -421,30 +418,36 @@ class ScreenRecorderService : Service() {
 
             audioEncoder?.let { encoder ->
                 try {
-                    val outIdx = encoder.dequeueOutputBuffer(aBufferInfo, 1000)
-                    if (outIdx >= 0) {
-                        val buffer = encoder.getOutputBuffer(outIdx)
-                        if (buffer != null) {
-                            val manager = muxerManager
-                            if (manager != null) {
-                                val absoluteAudioPts = aBufferInfo.presentationTimeUs + manager.audioTimelineOffsetUs
-                                if (manager.audioTrackIndex >= 0 && manager.muxerStarted) {
-                                    if (manager.segmentFirstPtsUs == -1L) {
-                                        manager.segmentFirstPtsUs = absoluteAudioPts
-                                    }
-                                    if ((aBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
-                                        val pts = absoluteAudioPts - manager.segmentFirstPtsUs
-                                        if (pts >= 0) {
-                                            aBufferInfo.presentationTimeUs = pts
-                                            manager.writeSampleData(manager.audioTrackIndex, buffer, aBufferInfo)
+                    while (isRecording.get()) {
+                        val outIdx = encoder.dequeueOutputBuffer(aBufferInfo, 0)
+                        if (outIdx >= 0) {
+                            handledSomething = true
+                            val buffer = encoder.getOutputBuffer(outIdx)
+                            if (buffer != null) {
+                                val manager = muxerManager
+                                if (manager != null) {
+                                    val absoluteAudioPts = aBufferInfo.presentationTimeUs + manager.audioTimelineOffsetUs
+                                    if (manager.audioTrackIndex >= 0 && manager.muxerStarted) {
+                                        if (manager.segmentFirstPtsUs == -1L) {
+                                            manager.segmentFirstPtsUs = absoluteAudioPts
+                                        }
+                                        if ((aBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+                                            val pts = absoluteAudioPts - manager.segmentFirstPtsUs
+                                            if (pts >= 0) {
+                                                aBufferInfo.presentationTimeUs = pts
+                                                manager.writeSampleData(manager.audioTrackIndex, buffer, aBufferInfo)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            encoder.releaseOutputBuffer(outIdx, false)
+                        } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                            handledSomething = true
+                            muxerManager?.addTrack(encoder.outputFormat, isVideo = false)
+                        } else {
+                            break
                         }
-                        encoder.releaseOutputBuffer(outIdx, false)
-                    } else if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                        muxerManager?.addTrack(encoder.outputFormat, isVideo = false)
                     }
                 } catch (e: Exception) {
                     if (isRecording.get()) {
@@ -453,7 +456,10 @@ class ScreenRecorderService : Service() {
                 }
             }
 
-            delay(5)
+            // 💡 何も処理しなかった場合のみ delay を入れる（ビジーループ防止と低遅延の両立）
+            if (!handledSomething) {
+                delay(10)
+            }
         }
         audioRecorderController?.stop()
     }
@@ -473,22 +479,31 @@ class ScreenRecorderService : Service() {
 
     private fun saveBufferInternal(targetMs: Long, isAutoSave: Boolean) {
         if (isSaving.getAndSet(true)) return
-        serviceScope.launch(Dispatchers.Default) {
+        // 💡 録画のパフォーマンスを最優先するため、IOスレッドで実行し、
+        // かつスレッド優先度を低めに設定したCoroutineで処理する
+        serviceScope.launch(Dispatchers.IO) {
             try {
-                floatingViewManager?.setSavingMode(true, isWipeout = isAutoSave)
+                withContext(Dispatchers.Main) {
+                    floatingViewManager?.setSavingMode(true, isWipeout = isAutoSave)
+                }
 
                 rotateMuxerNextLoop = true
                 var waitCount = 0
+                // キーフレームを待つ（最大2秒）
                 while (rotateMuxerNextLoop && waitCount < 20) {
                     delay(100)
                     waitCount++
                 }
                 if (rotateMuxerNextLoop) {
-                    rotateMuxer()
-                    lastMuxerRotationTimeMs = System.currentTimeMillis()
-                    rotateMuxerNextLoop = false
+                    // タイムアウトした場合はメインスレッドで強制的に回転させる
+                    withContext(Dispatchers.Main) {
+                        rotateMuxer()
+                        lastMuxerRotationTimeMs = System.currentTimeMillis()
+                        rotateMuxerNextLoop = false
+                    }
                 }
 
+                // 💡 ファイルのフィルタリングや解析などの重い処理を IO スレッドで実行継続
                 val landscapeCount = muxerManager?.segments?.count { it.name.endsWith("_L.mp4") } ?: 0
                 val portraitCount = muxerManager?.segments?.count { it.name.endsWith("_P.mp4") } ?: 0
                 val targetSuffix = if (landscapeCount >= portraitCount) "_L.mp4" else "_P.mp4"
@@ -497,18 +512,17 @@ class ScreenRecorderService : Service() {
 
                 if (available.isNotEmpty()) {
                     Log.d("ZZZGlip_Save", "Starting merge for ${available.size} files, targetMs=$targetMs")
-                    withContext(Dispatchers.IO) {
-                        val fileName = "clip_${System.currentTimeMillis()}.mp4"
-                        val prefix = if (isAutoSave) "WIPEOUT" else ""
-                        val pfd = fileManager.createVideoFileDescriptorWithPrefix(prefix, fileName)
+                    
+                    val fileName = "clip_${System.currentTimeMillis()}.mp4"
+                    val prefix = if (isAutoSave) "WIPEOUT" else ""
+                    val pfd = fileManager.createVideoFileDescriptorWithPrefix(prefix, fileName)
 
-                        if (pfd != null) {
-                            fileManager.fastMergeFiles(available, targetMs, pfd)
-                            pfd.close()
-                            Log.i("ZZZGlip_Save", "Successfully saved video: $fileName (prefix=$prefix)")
-                        } else {
-                            Log.e("ZZZGlip_Save", "Failed to open FileDescriptor for $fileName")
-                        }
+                    if (pfd != null) {
+                        fileManager.fastMergeFiles(available, targetMs, pfd)
+                        pfd.close()
+                        Log.i("ZZZGlip_Save", "Successfully saved video: $fileName (prefix=$prefix)")
+                    } else {
+                        Log.e("ZZZGlip_Save", "Failed to open FileDescriptor for $fileName")
                     }
                 } else {
                     Log.w("ZZZGlip_Save", "No matching segment files found (suffix=$targetSuffix, count=${muxerManager?.segments?.size ?: 0})")
@@ -517,7 +531,9 @@ class ScreenRecorderService : Service() {
                 Log.e("ZZZGlip_Save", "CRITICAL ERROR during save: ${e.message}", e)
             } finally {
                 isSaving.set(false)
-                floatingViewManager?.setSavingMode(false)
+                withContext(Dispatchers.Main) {
+                    floatingViewManager?.setSavingMode(false)
+                }
             }
         }
     }
